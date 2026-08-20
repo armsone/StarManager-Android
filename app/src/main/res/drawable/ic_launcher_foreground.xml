@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  iOS AppIcon(starmanager-app-icon.png)의 벡터 근사치.
+  실제 PNG는 scripts/copy-ios-assets.sh 로 복사한 뒤 mipmap PNG로 교체할 수 있다.
+  BrandTheme.accent (0.42, 0.33, 0.67) 별 모양.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#6B54AB"
+        android:pathData="M54,26 L60.5,44.9 L80.5,45.3 L64.5,57.3 L70.3,76.5 L54,64.9 L37.7,76.5 L43.5,57.3 L27.5,45.3 L47.5,44.9 Z" />
+</vector>

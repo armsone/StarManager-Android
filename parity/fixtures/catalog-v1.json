@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "catalog-v1",
+  "locale": "ko-KR",
+  "timezone": "Asia/Seoul",
+  "theme": "light",
+  "launchExtras": {
+    "starmanager.fixture.zeroDelay": true,
+    "starmanager.fixture.resetState": true
+  },
+  "states": [
+    {"id":"composer_empty_default","route":"composer","actions":[]},
+    {"id":"composer_idea_entered","route":"composer","actions":["composer.idea=오늘 아침 한강에서 달리기를 하고 커피를 마셨다"]},
+    {"id":"composer_style_mz","route":"composer","actions":["composer.style.mz=tap"]},
+    {"id":"composer_style_x","route":"composer","actions":["composer.style.genX=tap"]},
+    {"id":"composer_style_386","route":"composer","actions":["composer.style.generation386=tap"]},
+    {"id":"composer_style_babyboom","route":"composer","actions":["composer.style.babyBoom=tap"]},
+    {"id":"composer_generated_valid","route":"composer","actions":["composer.idea=오늘 아침 한강에서 달리기를 하고 커피를 마셨다","composer.ai.apple-ai=tap","await=preview.caption"]},
+    {"id":"composer_generated_stale","route":"composer","actions":["state=composer_generated_valid","composer.idea=바뀐 이야기"]},
+    {"id":"composer_external_pending_chatgpt","route":"composer","actions":["composer.idea=오늘의 기록","composer.ai.openAI=tap"]},
+    {"id":"composer_external_pending_gemini","route":"composer","actions":["composer.idea=오늘의 기록","composer.ai.gemini=tap"]},
+    {"id":"composer_external_pending_grok","route":"composer","actions":["composer.idea=오늘의 기록","composer.ai.grok=tap"]},
+    {"id":"settings_default","route":"settings","actions":["tab.SETTINGS=tap"]},
+    {"id":"settings_tone_expanded","route":"settings","actions":["tab.SETTINGS=tap","settings.toneDisclosure=tap"]},
+    {"id":"settings_advanced_expanded","route":"settings","actions":["tab.SETTINGS=tap","settings.guidelinesDisclosure=tap"]},
+    {"id":"settings_restore_confirm","route":"settings","actions":["tab.SETTINGS=tap","settings.guidelinesDisclosure=tap","settings.restoreDefaults=tap"]}
+  ],
+  "profiles": [
+    {"id":"phone_portrait","minWidthDp":360,"orientation":"portrait","fontScale":1.0},
+    {"id":"tablet_portrait","minWidthDp":600,"orientation":"portrait","fontScale":1.0},
+    {"id":"tablet_landscape","minWidthDp":600,"orientation":"landscape","fontScale":1.0},
+    {"id":"phone_accessibility","minWidthDp":360,"orientation":"portrait","fontScale":1.3}
+  ]
+}

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- iOS INFOPLIST_KEY_CFBundleDisplayName = StarManager -->
+    <string name="app_name">StarManager</string>
+</resources>

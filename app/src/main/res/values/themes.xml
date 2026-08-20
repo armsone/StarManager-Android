@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- iOS 앱은 preferredColorScheme(.light)로 라이트 테마를 강제한다. -->
+    <style name="Theme.StarManager" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FAF7F0</item>
+        <item name="android:statusBarColor">#FAF7F0</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">#000000</item>
+    </style>
+</resources>
