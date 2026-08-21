@@ -216,8 +216,8 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                     }
                 }
 
-                // 프리셋 저장
-                SettingsSection(header = "프리셋 저장") {
+                // 프리셋 보관
+                SettingsSection(header = "프리셋 보관") {
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -241,7 +241,7 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                         }
                         val saveEnabled = presetName.trim().isNotEmpty()
                         Text(
-                            "저장",
+                            "이 기기에 보관",
                             fontSize = 17.sp,
                             color = if (saveEnabled) BrandTheme.accent else BrandTheme.labelSecondary,
                             modifier = Modifier

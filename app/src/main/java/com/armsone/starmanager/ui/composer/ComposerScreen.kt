@@ -8,6 +8,7 @@ import android.media.MediaMetadataRetriever
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -47,6 +48,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.EmojiPeople
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Photo
@@ -56,6 +59,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.SmartDisplay
 import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Warning
@@ -64,9 +68,11 @@ import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Diamond
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -74,10 +80,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.draganddrop.mimeTypes
@@ -95,6 +103,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -105,6 +114,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.armsone.starmanager.R
 import com.armsone.starmanager.design.BrandTheme
+import com.armsone.starmanager.design.GlossyPrimaryButton
 import com.armsone.starmanager.design.StarSegmentedControl
 import com.armsone.starmanager.design.StarSlider
 import com.armsone.starmanager.design.starCard
@@ -126,7 +136,7 @@ fun ComposerScreen(viewModel: ComposerViewModel) {
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .background(BrandTheme.canvas)
+            .background(BrandTheme.canvasGradient)
     ) {
         // iOS horizontalSizeClass == .regular 대응: 600dp 이상이면 2열.
         val isRegular = maxWidth >= 600.dp
@@ -240,7 +250,7 @@ private fun CreationColumn(viewModel: ComposerViewModel, state: ComposerUiState)
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         Text(
-            "오늘 전하고 싶은 이야기는 무엇인가요?",
+            "오늘 어떤 이야기를 전할까요?",
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             lineHeight = 28.sp,
@@ -253,71 +263,85 @@ private fun CreationColumn(viewModel: ComposerViewModel, state: ComposerUiState)
             modifier = Modifier.testTag("composer.idea")
         )
 
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("스타일", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            val columns = if (LocalDensity.current.fontScale >= 1.3f) 1 else 4
-            GenerationStylePreset.entries.chunked(columns).forEach { rowPresets ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    rowPresets.forEach { preset ->
-                        StyleButton(
-                            preset = preset,
-                            selected = state.selectedGenerationStyle == preset,
-                            onClick = {
-                                focusManager.clearFocus()
-                                viewModel.applyGenerationStyle(preset)
-                            },
+        var showsFeelAdjustment by remember { mutableStateOf(false) }
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            DisclosureHeader(
+                title = "느낌 조정",
+                icon = Icons.Filled.Tune,
+                expanded = showsFeelAdjustment,
+                onToggle = { showsFeelAdjustment = !showsFeelAdjustment },
+                testTag = "composer.feelAdjustmentDisclosure"
+            )
+            AnimatedVisibility(visible = showsFeelAdjustment) {
+                Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("스타일", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        val columns = if (LocalDensity.current.fontScale >= 1.3f) 1 else 4
+                        GenerationStylePreset.entries.chunked(columns).forEach { rowPresets ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                rowPresets.forEach { preset ->
+                                    StyleButton(
+                                        preset = preset,
+                                        selected = state.selectedGenerationStyle == preset,
+                                        onClick = {
+                                            focusManager.clearFocus()
+                                            viewModel.applyGenerationStyle(preset)
+                                        },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("composer.style.${preset.rawValue}")
+                                    )
+                                }
+                                repeat(columns - rowPresets.size) { Spacer(Modifier.weight(1f)) }
+                            }
+                        }
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("분위기", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(70.dp))
+                        StarSegmentedControl(
+                            options = PostMood.entries.map { it.rawValue },
+                            selectedIndex = PostMood.entries.indexOf(state.mood),
+                            onSelect = { viewModel.setMood(PostMood.entries[it]) },
                             modifier = Modifier
                                 .weight(1f)
-                                .testTag("composer.style.${preset.rawValue}")
+                                .testTag("composer.mood")
                         )
                     }
-                    repeat(columns - rowPresets.size) { Spacer(Modifier.weight(1f)) }
+
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("이야기 비중", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(70.dp))
+                        StarSegmentedControl(
+                            options = PostLength.entries.map { it.storyWeightTitle },
+                            selectedIndex = PostLength.entries.indexOf(state.length),
+                            onSelect = { viewModel.setLength(PostLength.entries[it]) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("composer.length")
+                        )
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("글자 수", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.weight(1f))
+                            Text(
+                                "${profile.controls.characterCount}자",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = BrandTheme.accent
+                            )
+                        }
+                        StarSlider(
+                            value = profile.controls.characterCount.toFloat(),
+                            onValueChange = { viewModel.setCharacterCount((Math.round(it / 10f) * 10)) },
+                            valueRange = 50f..500f,
+                            step = 10f,
+                            modifier = Modifier.testTag("composer.slider.characterCount")
+                        )
+                    }
                 }
             }
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("분위기", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(70.dp))
-            StarSegmentedControl(
-                options = PostMood.entries.map { it.rawValue },
-                selectedIndex = PostMood.entries.indexOf(state.mood),
-                onSelect = { viewModel.setMood(PostMood.entries[it]) },
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("composer.mood")
-            )
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("이야기 비중", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(70.dp))
-            StarSegmentedControl(
-                options = PostLength.entries.map { it.storyWeightTitle },
-                selectedIndex = PostLength.entries.indexOf(state.length),
-                onSelect = { viewModel.setLength(PostLength.entries[it]) },
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("composer.length")
-            )
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("글자 수", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.weight(1f))
-                Text(
-                    "${profile.controls.characterCount}자",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = BrandTheme.accent
-                )
-            }
-            StarSlider(
-                value = profile.controls.characterCount.toFloat(),
-                onValueChange = { viewModel.setCharacterCount((Math.round(it / 10f) * 10)) },
-                valueRange = 50f..500f,
-                step = 10f,
-                modifier = Modifier.testTag("composer.slider.characterCount")
-            )
         }
 
         AiChoiceButtons(viewModel, state)
@@ -345,14 +369,7 @@ private fun CreationColumn(viewModel: ComposerViewModel, state: ComposerUiState)
                     ),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("미디어", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "사진·영상을 선택하거나 드래그해 최대 ${MediaAttachmentPolicy.MAX_ITEMS}개 추가",
-                        fontSize = 12.sp,
-                        color = BrandTheme.labelSecondary
-                    )
-                }
+                Text("미디어", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
 
                 StarSegmentedControl(
                     options = PreviewAspect.entries.map { it.title },
@@ -437,7 +454,7 @@ private fun IdeaField(value: String, onValueChange: (String) -> Unit, modifier: 
             .padding(14.dp)
     ) {
         if (value.isEmpty()) {
-            Text("오늘의 이야기", fontSize = 17.sp, color = BrandTheme.labelSecondary)
+            Text("한 줄로 적어 주세요", fontSize = 17.sp, color = BrandTheme.labelSecondary)
         }
         BasicTextField(
             value = value,
@@ -531,35 +548,21 @@ private fun BorderedActionButton(
 private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState) {
     val context = LocalContext.current
     val trimmedIdeaEmpty = state.idea.trim().isEmpty()
+    var selectedChoiceId by rememberSaveable { mutableStateOf(AIChoice.External(DirectAIProvider.OPEN_AI).id) }
+    var confirmingProvider by remember { mutableStateOf<DirectAIProvider?>(null) }
+    val selectedChoice = AIChoice.all.first { it.id == selectedChoiceId }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         val columns = if (LocalDensity.current.fontScale >= 1.3f) 2 else 4
         AIChoice.all.chunked(columns).forEach { rowChoices ->
-            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 rowChoices.forEach { choice ->
-                    val opacity = when {
-                        trimmedIdeaEmpty -> 0.48f
-                        state.isGenerating && choice != AIChoice.OnDevice -> 0.4f
-                        else -> 1f
-                    }
-                    AiChoiceButton(
+                    AIChoiceCard(
                         choice = choice,
-                        isGenerating = state.isGenerating,
-                        enabled = !trimmedIdeaEmpty && !state.isGenerating,
-                        onClick = {
-                            when (choice) {
-                                is AIChoice.OnDevice -> viewModel.generateDraft()
-                                is AIChoice.External -> {
-                                    val intent = viewModel.sharePrompt(choice.provider, context)
-                                    if (intent != null) {
-                                        context.startActivity(android.content.Intent.createChooser(intent, null))
-                                    }
-                                }
-                            }
-                        },
+                        selected = choice.id == selectedChoiceId,
+                        onClick = { selectedChoiceId = choice.id },
                         modifier = Modifier
                             .weight(1f)
-                            .graphicsLayer { alpha = opacity }
                             .testTag("composer.ai.${choice.id}")
                     )
                 }
@@ -567,27 +570,35 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
             }
         }
 
-        if (state.isGenerating) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .background(BrandTheme.accent.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                CircularProgressIndicator(
-                    Modifier.size(20.dp),
-                    color = BrandTheme.accent,
-                    strokeWidth = 2.dp
-                )
-                Text(
-                    "Apple AI가 게시물을 만드는 중…",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.testTag("composer.generating")
-                )
+        GlossyPrimaryButton(
+            onClick = {
+                when (selectedChoice) {
+                    AIChoice.OnDevice -> viewModel.generateDraft()
+                    is AIChoice.External -> confirmingProvider = selectedChoice.provider
+                }
+            },
+            enabled = !trimmedIdeaEmpty && !state.isGenerating,
+            modifier = Modifier.testTag("composer.ai.run")
+        ) {
+            if (state.isGenerating) {
+                CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+            } else {
+                Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
             }
+            Spacer(Modifier.width(9.dp))
+            Text(
+                if (state.isGenerating) {
+                    "게시물을 만드는 중…"
+                } else {
+                    when (selectedChoice) {
+                        AIChoice.OnDevice -> "AI로 만들기"
+                        is AIChoice.External -> "${selectedChoice.provider.title}에서 만들기"
+                    }
+                },
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
         }
 
         val provider = state.pendingExternalProvider
@@ -616,58 +627,113 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
             }
         }
     }
+
+    val provider = confirmingProvider
+    if (provider != null) {
+        ExternalProviderConfirmDialog(
+            provider = provider,
+            onConfirm = {
+                confirmingProvider = null
+                val intent = viewModel.sharePrompt(provider, context)
+                if (intent != null) {
+                    context.startActivity(android.content.Intent.createChooser(intent, null))
+                }
+            },
+            onCancel = { confirmingProvider = null }
+        )
+    }
 }
 
 @Composable
-private fun AiChoiceButton(
+private fun AIChoiceCard(
     choice: AIChoice,
-    isGenerating: Boolean,
-    enabled: Boolean,
+    selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(13.dp)
-    val (background, foreground, border) = when (choice) {
-        is AIChoice.OnDevice -> Triple(BrandTheme.accent, Color.White, BrandTheme.accent)
-        is AIChoice.External -> when (choice.provider) {
-            DirectAIProvider.OPEN_AI -> Triple(
-                Color.White, Color(0.10f, 0.10f, 0.11f), Color.Black.copy(alpha = 0.14f)
-            )
-            DirectAIProvider.GEMINI -> Triple(
-                Color(0.92f, 0.95f, 1.00f),
-                Color(0.10f, 0.10f, 0.11f),
-                Color(0.25f, 0.52f, 0.96f).copy(alpha = 0.32f)
-            )
-            DirectAIProvider.GROK -> Triple(Color.Black, Color.White, Color.Black)
-        }
-    }
     Column(
         modifier = modifier
-            .heightIn(min = 58.dp)
-            .background(background, shape)
-            .border(1.dp, border, shape)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 6.dp),
+            .heightIn(min = 72.dp)
+            .background(if (selected) BrandTheme.paper else BrandTheme.surface, shape)
+            .border(if (selected) 1.5.dp else 1.dp, if (selected) BrandTheme.accent else BrandTheme.border, shape)
+            .semantics { this.selected = selected }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 5.dp, vertical = 9.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(5.dp)
+        verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
-            when {
-                isGenerating && choice is AIChoice.OnDevice ->
-                    CircularProgressIndicator(Modifier.size(20.dp), color = foreground, strokeWidth = 2.dp)
-                choice is AIChoice.OnDevice ->
-                    // iOS는 apple.logo — 상표 자산이라 스파클 근사치를 쓴다.
-                    Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = foreground)
-                choice is AIChoice.External ->
-                    BrandIcon(choice.provider)
-            }
+        when (choice) {
+            AIChoice.OnDevice -> Icon(
+                Icons.Filled.AutoAwesome,
+                contentDescription = null,
+                tint = BrandTheme.ink,
+                modifier = Modifier.size(26.dp)
+            )
+            is AIChoice.External -> BrandIcon(choice.provider)
         }
         Text(
             choice.title,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
-            color = foreground,
+            color = BrandTheme.ink,
             maxLines = 1
+        )
+    }
+}
+
+/** 공유 화면으로 나가기 전에 목적지와 이유를 알리는 앱 소유 확인창 — 취소 시 상태 변화 없음. */
+@Composable
+private fun ExternalProviderConfirmDialog(
+    provider: DirectAIProvider,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("${provider.title} 앱에서 만들까요?") },
+        text = {
+            Text("공유 화면에서 ${provider.title} 앱을 선택하세요. 결과를 복사해 돌아오면 스타메니저에서 가져올 수 있습니다.")
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, modifier = Modifier.testTag("composer.externalConfirm")) {
+                Text("공유 화면 열기", color = BrandTheme.accent)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel, modifier = Modifier.testTag("composer.externalCancel")) {
+                Text("취소", color = BrandTheme.labelSecondary)
+            }
+        }
+    )
+}
+
+@Composable
+private fun DisclosureHeader(
+    title: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    testTag: String,
+    icon: ImageVector? = null,
+    titleFontSize: androidx.compose.ui.unit.TextUnit = 15.sp,
+    titleColor: Color = BrandTheme.ink
+) {
+    Row(
+        Modifier
+            .clickable(onClick = onToggle)
+            .testTag(testTag),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        if (icon != null) {
+            Icon(icon, contentDescription = null, tint = titleColor, modifier = Modifier.size(16.dp))
+        }
+        Text(title, fontSize = titleFontSize, fontWeight = FontWeight.SemiBold, color = titleColor)
+        Icon(
+            if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+            contentDescription = null,
+            tint = titleColor,
+            modifier = Modifier.size(18.dp)
         )
     }
 }
@@ -986,41 +1052,36 @@ private fun PreviewColumn(viewModel: ComposerViewModel, state: ComposerUiState) 
                 }
 
                 SelectionContainer {
+                    val resultShape = RoundedCornerShape(14.dp)
                     Text(
                         post.composedText,
                         fontSize = 17.sp,
                         lineHeight = 24.sp,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(BrandTheme.paper, RoundedCornerShape(14.dp))
+                            .shadow(12.dp, resultShape, ambientColor = BrandTheme.ink.copy(alpha = 0.08f), spotColor = BrandTheme.ink.copy(alpha = 0.08f))
+                            .background(BrandTheme.resultSurface, resultShape)
+                            .border(1.dp, Color.White, resultShape)
                             .padding(14.dp)
                             .testTag("preview.text")
                     )
                 }
 
-                // Instagram으로 공유
+                // Instagram으로 공유 — 결과 화면의 단일 지배적 액션.
                 val shareEnabled = !state.isPreparingShare && !state.isGenerating
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .background(
-                            BrandTheme.accent.copy(alpha = if (shareEnabled) 1f else 0.5f),
-                            RoundedCornerShape(12.dp)
-                        )
-                        .clickable(enabled = shareEnabled) {
-                            scope.launch {
-                                val intent = viewModel.prepareShare(post, context)
-                                if (intent != null) {
-                                    context.startActivity(
-                                        android.content.Intent.createChooser(intent, null)
-                                    )
-                                }
+                GlossyPrimaryButton(
+                    onClick = {
+                        scope.launch {
+                            val intent = viewModel.prepareShare(post, context)
+                            if (intent != null) {
+                                context.startActivity(
+                                    android.content.Intent.createChooser(intent, null)
+                                )
                             }
                         }
-                        .testTag("preview.share"),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                    },
+                    enabled = shareEnabled,
+                    modifier = Modifier.testTag("preview.share")
                 ) {
                     if (state.isPreparingShare) {
                         CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)

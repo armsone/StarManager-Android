@@ -22,6 +22,8 @@ import com.armsone.starmanager.service.DeterministicCaptionGenerator
 import com.armsone.starmanager.service.DirectAIProvider
 import com.armsone.starmanager.service.ExternalPromptBuilder
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -58,6 +60,9 @@ class ComposerViewModel : ViewModel() {
 
     private val _state = MutableStateFlow(ComposerUiState())
     val state: StateFlow<ComposerUiState> = _state.asStateFlow()
+    private var generationJob: Job? = null
+    private var mediaLoadJob: Job? = null
+    private var resetVersion = 0
 
     private fun update(transform: (ComposerUiState) -> ComposerUiState) {
         _state.value = transform(_state.value)
@@ -71,6 +76,34 @@ class ComposerViewModel : ViewModel() {
     fun setPreviewAspect(value: PreviewAspect) = update { it.copy(previewAspect = value) }
 
     val trimmedIdea: String get() = _state.value.idea.trim()
+
+    fun hasContent(): Boolean = _state.value.run {
+        idea.isNotEmpty() || generatedPost != null || mediaItems.isNotEmpty() || captionCandidates.isNotEmpty()
+    }
+
+    fun resetComposer() {
+        resetVersion += 1
+        generationJob?.cancel()
+        mediaLoadJob?.cancel()
+        update { state ->
+            state.copy(
+                idea = "",
+                generatedPost = null,
+                isGenerating = false,
+                errorMessage = null,
+                statusMessage = null,
+                mediaItems = emptyList(),
+                isLoadingMedia = false,
+                isPreparingShare = false,
+                shareMessage = null,
+                shareMessageIsError = false,
+                generatedSignature = null,
+                activeCaptionSource = null,
+                captionCandidates = emptyMap(),
+                pendingExternalProvider = null
+            )
+        }
+    }
 
     fun applyGenerationStyle(preset: GenerationStylePreset) {
         profileStore.setProfile(preset.applyingTo(profileStore.profile.value))
@@ -143,7 +176,8 @@ class ComposerViewModel : ViewModel() {
                 activeCaptionSource = null
             )
         }
-        viewModelScope.launch {
+        generationJob?.cancel()
+        generationJob = viewModelScope.launch {
             try {
                 val profile = profileStore.profile.value
                 val signature = currentDraftSignature()
@@ -168,6 +202,8 @@ class ComposerViewModel : ViewModel() {
                         isGenerating = false
                     )
                 }
+            } catch (_: CancellationException) {
+                return@launch
             } catch (error: Exception) {
                 update {
                     it.copy(
@@ -280,7 +316,8 @@ class ComposerViewModel : ViewModel() {
             return
         }
         update { it.copy(isLoadingMedia = true, errorMessage = null) }
-        viewModelScope.launch {
+        mediaLoadJob?.cancel()
+        mediaLoadJob = viewModelScope.launch {
             try {
                 val loaded = withContext(Dispatchers.IO) {
                     uris.mapNotNull { uri ->
@@ -368,6 +405,7 @@ class ComposerViewModel : ViewModel() {
 
     /** 문구를 복사하고 미디어 공유 인텐트를 준비한다. 반환값 null이면 안내 메시지만 갱신됨. */
     suspend fun prepareShare(post: GeneratedPost, context: Context): Intent? {
+        val version = resetVersion
         val snapshot = _state.value.mediaItems
         if (snapshot.isEmpty()) {
             update {
@@ -404,6 +442,7 @@ class ComposerViewModel : ViewModel() {
         }
         return try {
             val uris = withContext(Dispatchers.IO) { prepareShareFiles(snapshot, context) }
+            if (version != resetVersion) return null
             val passes = activeValidationReport()?.passesAllRules == true
             update {
                 it.copy(
@@ -414,6 +453,7 @@ class ComposerViewModel : ViewModel() {
             }
             buildShareIntent(uris, snapshot)
         } catch (error: Exception) {
+            if (version != resetVersion) return null
             update {
                 it.copy(
                     isPreparingShare = false,

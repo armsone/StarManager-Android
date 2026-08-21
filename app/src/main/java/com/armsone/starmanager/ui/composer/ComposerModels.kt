@@ -84,10 +84,10 @@ sealed class AIChoice(val id: String, val title: String) {
 
     companion object {
         val all: List<AIChoice> = listOf(
-            OnDevice,
             External(DirectAIProvider.OPEN_AI),
             External(DirectAIProvider.GEMINI),
-            External(DirectAIProvider.GROK)
+            External(DirectAIProvider.GROK),
+            OnDevice
         )
     }
 }

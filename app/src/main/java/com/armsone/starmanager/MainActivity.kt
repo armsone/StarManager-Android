@@ -20,14 +20,18 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -36,6 +40,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -93,13 +99,14 @@ fun StarManagerTheme(content: @Composable () -> Unit) {
 }
 
 private enum class AppTab(val title: String) {
-    COMPOSER("만들기"),
-    SETTINGS("내 설정")
+    COMPOSER("스튜디오"),
+    SETTINGS("나의 취향")
 }
 
 @Composable
 private fun StarManagerApp(profileStore: CreatorProfileStore) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    var showsResetConfirmation by remember { mutableStateOf(false) }
     val composerViewModel: ComposerViewModel = viewModel()
     composerViewModel.profileStore = profileStore
 
@@ -111,7 +118,7 @@ private fun StarManagerApp(profileStore: CreatorProfileStore) {
             .navigationBarsPadding()
     ) {
         // iOS inline 네비게이션 타이틀 근사치
-        TopBar(title = if (selectedTab == 0) "스타메니저" else "내 설정")
+        TopBar(title = if (selectedTab == 0) "스타메니저" else "나의 취향")
 
         Box(Modifier.weight(1f)) {
             when (AppTab.entries[selectedTab]) {
@@ -122,7 +129,32 @@ private fun StarManagerApp(profileStore: CreatorProfileStore) {
 
         BottomTabBar(
             selectedIndex = selectedTab,
-            onSelect = { selectedTab = it }
+            onSelect = { selectedTab = it },
+            onReset = {
+                selectedTab = 0
+                if (composerViewModel.hasContent()) showsResetConfirmation = true
+            }
+        )
+    }
+
+    if (showsResetConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showsResetConfirmation = false },
+            title = { Text("새 이야기로 시작할까요?") },
+            text = { Text("현재 이야기, 만든 게시물과 미디어를 비웁니다. 내 프로필과 설정은 그대로 유지됩니다.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    composerViewModel.resetComposer()
+                    showsResetConfirmation = false
+                }) {
+                    Text("새로 시작", color = BrandTheme.accent)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showsResetConfirmation = false }) {
+                    Text("취소", color = BrandTheme.labelSecondary)
+                }
+            }
         )
     }
 }
@@ -145,7 +177,7 @@ private fun TopBar(title: String) {
 
 /** iOS 탭바 근사치 — sparkles/person.crop.circle 대신 앱 소유 근사 아이콘 사용. */
 @Composable
-private fun BottomTabBar(selectedIndex: Int, onSelect: (Int) -> Unit) {
+private fun BottomTabBar(selectedIndex: Int, onSelect: (Int) -> Unit, onReset: () -> Unit) {
     Column {
         HorizontalDivider(color = Color(0x293C3C43), thickness = 0.5.dp)
         Row(
@@ -154,32 +186,64 @@ private fun BottomTabBar(selectedIndex: Int, onSelect: (Int) -> Unit) {
                 .height(52.dp)
                 .background(Color.White.copy(alpha = 0.98f))
         ) {
-            AppTab.entries.forEachIndexed { index, tab ->
-                val selected = index == selectedIndex
-                val tint = if (selected) BrandTheme.accent else Color(0xFF999999)
+            BottomTabButton(
+                title = AppTab.COMPOSER.title,
+                icon = tabIcon(AppTab.COMPOSER),
+                selected = selectedIndex == 0,
+                onClick = { onSelect(0) },
+                testTag = "tab.COMPOSER",
+                modifier = Modifier.weight(1f)
+            )
+            BottomTabButton(
+                title = "새 캔버스",
+                icon = Icons.Filled.RestartAlt,
+                selected = false,
+                onClick = onReset,
+                testTag = "tab.RESET",
+                modifier = Modifier.weight(1f)
+            )
+            BottomTabButton(
+                title = AppTab.SETTINGS.title,
+                icon = tabIcon(AppTab.SETTINGS),
+                selected = selectedIndex == 1,
+                onClick = { onSelect(1) },
+                testTag = "tab.SETTINGS",
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun BottomTabButton(
+    title: String,
+    icon: ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+    testTag: String,
+    modifier: Modifier = Modifier
+) {
+    val tint = if (selected) BrandTheme.accent else Color(0xFF77736F)
                 Column(
-                    Modifier
-                        .weight(1f)
+                    modifier
                         .fillMaxSize()
+                        .semantics { this.selected = selected }
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null
-                        ) { onSelect(index) }
-                        .testTag("tab.${tab.name}"),
+                        ) { onClick() }
+                        .testTag(testTag),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
                     Icon(
-                        tabIcon(tab),
-                        contentDescription = tab.title,
+                        icon,
+                        contentDescription = title,
                         tint = tint,
                         modifier = Modifier.size(24.dp)
                     )
-                    Text(tab.title, fontSize = 10.sp, color = tint)
+                    Text(title, fontSize = 10.sp, color = tint)
                 }
-            }
-        }
-    }
 }
 
 private fun tabIcon(tab: AppTab): ImageVector = when (tab) {
