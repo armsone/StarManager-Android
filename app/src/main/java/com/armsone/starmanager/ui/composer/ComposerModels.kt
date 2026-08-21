@@ -61,6 +61,14 @@ enum class MediaKind {
     val title: String get() = if (this == IMAGE) "사진" else "영상"
 }
 
+object MediaAttachmentPolicy {
+    const val MAX_ITEMS = 8
+
+    fun availableSlots(currentCount: Int): Int = (MAX_ITEMS - currentCount).coerceAtLeast(0)
+
+    fun canShare(itemCount: Int): Boolean = itemCount in 1..MAX_ITEMS
+}
+
 class ComposerMedia(
     val data: ByteArray,
     val kind: MediaKind,

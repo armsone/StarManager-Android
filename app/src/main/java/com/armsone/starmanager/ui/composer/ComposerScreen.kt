@@ -1,14 +1,19 @@
 package com.armsone.starmanager.ui.composer
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -73,6 +78,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.draganddrop.DragAndDropTarget
+import androidx.compose.ui.draganddrop.mimeTypes
+import androidx.compose.ui.draganddrop.toAndroidDragEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -159,17 +168,55 @@ fun ComposerScreen(viewModel: ComposerViewModel) {
 // MARK: - 만들기 카드
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun CreationColumn(viewModel: ComposerViewModel, state: ComposerUiState) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val profile by viewModel.profileStore.profile.collectAsStateWithLifecycle()
 
-    val maxSelection = maxOf(1, 10 - state.mediaItems.size)
+    val maxSelection = maxOf(1, MediaAttachmentPolicy.availableSlots(state.mediaItems.size))
     val photoPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(maxItems = if (maxSelection < 2) 2 else maxSelection)
     ) { uris ->
-        // maxItems<2가 계약상 불가하므로 초과분은 뷰모델에서 10개 제한으로 잘라낸다.
+        // maxItems<2가 계약상 불가하므로 초과분은 뷰모델에서 8개 제한으로 잘라낸다.
         viewModel.addPickedMedia(uris.take(maxSelection), context.contentResolver)
+    }
+
+    var isMediaDropTargeted by remember { mutableStateOf(false) }
+    val mediaDropTarget = remember(context, viewModel) {
+        object : DragAndDropTarget {
+            override fun onEntered(event: DragAndDropEvent) {
+                isMediaDropTargeted = true
+            }
+
+            override fun onExited(event: DragAndDropEvent) {
+                isMediaDropTargeted = false
+            }
+
+            override fun onEnded(event: DragAndDropEvent) {
+                isMediaDropTargeted = false
+            }
+
+            override fun onDrop(event: DragAndDropEvent): Boolean {
+                isMediaDropTargeted = false
+                val androidEvent = event.toAndroidDragEvent()
+                val clipData = androidEvent.clipData ?: return false
+                val uris = buildList {
+                    for (index in 0 until clipData.itemCount) {
+                        clipData.getItemAt(index).uri?.let(::add)
+                    }
+                }
+                if (uris.isEmpty()) return false
+
+                val permissions = context.findActivity()?.requestDragAndDropPermissions(androidEvent)
+                viewModel.addPickedMedia(
+                    uris = uris,
+                    resolver = context.contentResolver,
+                    onFinished = { permissions?.release() }
+                )
+                return true
+            }
+        }
     }
 
     var cameraOutput by remember { mutableStateOf<File?>(null) }
@@ -276,8 +323,36 @@ private fun CreationColumn(viewModel: ComposerViewModel, state: ComposerUiState)
         AiChoiceButtons(viewModel, state)
 
         if (state.generatedPost != null) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("미디어", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            val mediaSectionShape = RoundedCornerShape(14.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .dragAndDropTarget(
+                        shouldStartDragAndDrop = { event ->
+                            MediaAttachmentPolicy.availableSlots(state.mediaItems.size) > 0 &&
+                                event.mimeTypes().any { mime ->
+                                    mime.startsWith("image/") || mime.startsWith("video/")
+                                }
+                        },
+                        target = mediaDropTarget
+                    )
+                    .then(
+                        if (isMediaDropTargeted) {
+                            Modifier.border(2.dp, BrandTheme.accent, mediaSectionShape)
+                        } else {
+                            Modifier
+                        }
+                    ),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("미디어", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "사진·영상을 선택하거나 드래그해 최대 ${MediaAttachmentPolicy.MAX_ITEMS}개 추가",
+                        fontSize = 12.sp,
+                        color = BrandTheme.labelSecondary
+                    )
+                }
 
                 StarSegmentedControl(
                     options = PreviewAspect.entries.map { it.title },
@@ -290,7 +365,8 @@ private fun CreationColumn(viewModel: ComposerViewModel, state: ComposerUiState)
                     BorderedActionButton(
                         title = "미디어",
                         icon = if (state.mediaItems.isEmpty()) Icons.Filled.AddPhotoAlternate else Icons.Filled.CheckCircle,
-                        enabled = !state.isLoadingMedia && state.mediaItems.size < 10,
+                        enabled = !state.isLoadingMedia &&
+                            MediaAttachmentPolicy.availableSlots(state.mediaItems.size) > 0,
                         onClick = {
                             photoPicker.launch(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
@@ -303,7 +379,7 @@ private fun CreationColumn(viewModel: ComposerViewModel, state: ComposerUiState)
                     BorderedActionButton(
                         title = "카메라",
                         icon = Icons.Filled.PhotoCamera,
-                        enabled = state.mediaItems.size < 10,
+                        enabled = MediaAttachmentPolicy.availableSlots(state.mediaItems.size) > 0,
                         onClick = {
                             val hasCamera = context.packageManager
                                 .hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY)
@@ -733,6 +809,12 @@ private fun MediaOrderEditor(viewModel: ComposerViewModel, state: ComposerUiStat
             }
         }
     }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 @Composable

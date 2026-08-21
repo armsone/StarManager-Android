@@ -265,40 +265,67 @@ class ComposerViewModel : ViewModel() {
 
     // MARK: - 미디어
 
-    fun addPickedMedia(uris: List<Uri>, resolver: ContentResolver) {
-        if (uris.isEmpty()) return
+    fun addPickedMedia(
+        uris: List<Uri>,
+        resolver: ContentResolver,
+        onFinished: () -> Unit = {}
+    ) {
+        if (uris.isEmpty()) {
+            onFinished()
+            return
+        }
+        if (MediaAttachmentPolicy.availableSlots(_state.value.mediaItems.size) == 0) {
+            update { it.copy(errorMessage = "미디어는 최대 ${MediaAttachmentPolicy.MAX_ITEMS}개까지 추가할 수 있어요.") }
+            onFinished()
+            return
+        }
         update { it.copy(isLoadingMedia = true, errorMessage = null) }
         viewModelScope.launch {
-            val loaded = withContext(Dispatchers.IO) {
-                uris.mapNotNull { uri ->
-                    val bytes = runCatching {
-                        resolver.openInputStream(uri)?.use { it.readBytes() }
-                    }.getOrNull() ?: return@mapNotNull null
-                    val mime = resolver.getType(uri)
-                    val kind = if (mime?.startsWith("video") == true) MediaKind.VIDEO else MediaKind.IMAGE
-                    val ext = mime?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
-                    ComposerMedia(data = bytes, kind = kind, fileExtension = ext)
+            try {
+                val loaded = withContext(Dispatchers.IO) {
+                    uris.mapNotNull { uri ->
+                        val bytes = runCatching {
+                            resolver.openInputStream(uri)?.use { it.readBytes() }
+                        }.getOrNull() ?: return@mapNotNull null
+                        val mime = resolver.getType(uri)
+                        val kind = if (mime?.startsWith("video") == true) MediaKind.VIDEO else MediaKind.IMAGE
+                        val ext = mime?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
+                        ComposerMedia(data = bytes, kind = kind, fileExtension = ext)
+                    }
                 }
-            }
-            update { state ->
-                if (loaded.isEmpty()) {
-                    state.copy(isLoadingMedia = false, errorMessage = "선택한 미디어를 불러오지 못했어요.")
-                } else {
-                    val availableCount = maxOf(0, 10 - state.mediaItems.size)
-                    val accepted = loaded.take(availableCount)
-                    state.copy(
-                        isLoadingMedia = false,
-                        mediaItems = state.mediaItems + accepted,
-                        statusMessage = "${accepted.size}개 추가"
-                    )
+                update { state ->
+                    if (loaded.isEmpty()) {
+                        state.copy(isLoadingMedia = false, errorMessage = "선택한 미디어를 불러오지 못했어요.")
+                    } else {
+                        val accepted = loaded.take(MediaAttachmentPolicy.availableSlots(state.mediaItems.size))
+                        if (accepted.isEmpty()) {
+                            state.copy(
+                                isLoadingMedia = false,
+                                errorMessage = "미디어는 최대 ${MediaAttachmentPolicy.MAX_ITEMS}개까지 추가할 수 있어요."
+                            )
+                        } else {
+                            state.copy(
+                                isLoadingMedia = false,
+                                mediaItems = state.mediaItems + accepted,
+                                errorMessage = null,
+                                statusMessage = if (loaded.size > accepted.size) {
+                                    "${accepted.size}개 추가 · 최대 ${MediaAttachmentPolicy.MAX_ITEMS}개"
+                                } else {
+                                    "${accepted.size}개 추가"
+                                }
+                            )
+                        }
+                    }
                 }
+            } finally {
+                onFinished()
             }
         }
     }
 
     fun addCameraPhoto(bytes: ByteArray) {
         update { state ->
-            if (state.mediaItems.size >= 10) state
+            if (MediaAttachmentPolicy.availableSlots(state.mediaItems.size) == 0) state
             else state.copy(
                 mediaItems = state.mediaItems +
                     ComposerMedia(data = bytes, kind = MediaKind.IMAGE, fileExtension = "jpg"),
@@ -345,6 +372,15 @@ class ComposerViewModel : ViewModel() {
         if (snapshot.isEmpty()) {
             update {
                 it.copy(shareMessage = "사진이나 영상을 먼저 추가해 주세요.", shareMessageIsError = true)
+            }
+            return null
+        }
+        if (!MediaAttachmentPolicy.canShare(snapshot.size)) {
+            update {
+                it.copy(
+                    shareMessage = "미디어는 최대 ${MediaAttachmentPolicy.MAX_ITEMS}개까지 공유할 수 있어요.",
+                    shareMessageIsError = true
+                )
             }
             return null
         }
