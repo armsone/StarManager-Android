@@ -360,13 +360,14 @@ class ComposerViewModel : ViewModel() {
         }
     }
 
-    fun addCameraPhoto(bytes: ByteArray) {
+    fun addCameraPhoto(bytes: ByteArray, gallerySaved: Boolean = true) {
         update { state ->
             if (MediaAttachmentPolicy.availableSlots(state.mediaItems.size) == 0) state
             else state.copy(
                 mediaItems = state.mediaItems +
                     ComposerMedia(data = bytes, kind = MediaKind.IMAGE, fileExtension = "jpg"),
-                statusMessage = "촬영한 사진 추가"
+                statusMessage = "촬영한 사진 추가",
+                errorMessage = if (gallerySaved) state.errorMessage else "갤러리에 사진을 저장하지 못했어요."
             )
         }
     }

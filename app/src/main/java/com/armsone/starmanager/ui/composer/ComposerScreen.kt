@@ -1,13 +1,20 @@
 package com.armsone.starmanager.ui.composer
 
+import android.Manifest
 import android.app.Activity
+import android.content.ContentValues
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -74,6 +81,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -123,6 +131,7 @@ import com.armsone.starmanager.model.PostLength
 import com.armsone.starmanager.model.PostMood
 import com.armsone.starmanager.service.DirectAIProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -132,6 +141,7 @@ import java.util.UUID
 fun ComposerScreen(viewModel: ComposerViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val scrollState = rememberScrollState()
+    var cameraOutputPath by rememberSaveable { mutableStateOf<String?>(null) }
 
     BoxWithConstraints(
         Modifier
@@ -159,7 +169,9 @@ fun ComposerScreen(viewModel: ComposerViewModel) {
                     horizontalArrangement = Arrangement.spacedBy(20.dp),
                     verticalAlignment = Alignment.Top
                 ) {
-                    Box(Modifier.weight(1f)) { CreationColumn(viewModel, state) }
+                    Box(Modifier.weight(1f)) {
+                        CreationColumn(viewModel, state, cameraOutputPath) { cameraOutputPath = it }
+                    }
                     Box(Modifier.weight(1f)) { PreviewColumn(viewModel, state) }
                 }
             } else {
@@ -167,7 +179,7 @@ fun ComposerScreen(viewModel: ComposerViewModel) {
                     Modifier.widthIn(max = contentMaxWidth),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    CreationColumn(viewModel, state)
+                    CreationColumn(viewModel, state, cameraOutputPath) { cameraOutputPath = it }
                     PreviewColumn(viewModel, state)
                 }
             }
@@ -179,7 +191,12 @@ fun ComposerScreen(viewModel: ComposerViewModel) {
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
-private fun CreationColumn(viewModel: ComposerViewModel, state: ComposerUiState) {
+private fun CreationColumn(
+    viewModel: ComposerViewModel,
+    state: ComposerUiState,
+    cameraOutputPath: String?,
+    onCameraOutputPathChange: (String?) -> Unit
+) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val profile by viewModel.profileStore.profile.collectAsStateWithLifecycle()
@@ -229,16 +246,74 @@ private fun CreationColumn(viewModel: ComposerViewModel, state: ComposerUiState)
         }
     }
 
-    var cameraOutput by remember { mutableStateOf<File?>(null) }
+    val scope = rememberCoroutineScope()
+
+    var cameraCaptureRequest by remember { mutableStateOf(0) }
+    val storagePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { _ ->
+        cameraCaptureRequest += 1
+    }
+
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { success ->
-        val file = cameraOutput
-        if (success && file != null && file.exists()) {
-            viewModel.addCameraPhoto(file.readBytes())
+        val file = cameraOutputPath?.let(::File)
+        scope.launch {
+            var photoAdded = false
+            try {
+                val (photoBytes, gallerySaved) = withContext(Dispatchers.IO) {
+                    val bytes = file
+                        ?.takeIf { success && it.isFile }
+                        ?.let { output ->
+                            runCatching { output.readBytes() }
+                                .getOrNull()
+                                ?.takeIf { it.isNotEmpty() }
+                        }
+                    val saved = if (bytes != null) {
+                        saveImageToGallery(context, bytes)
+                    } else {
+                        true
+                    }
+                    bytes to saved
+                }
+                if (photoBytes != null) {
+                    val previousCount = viewModel.state.value.mediaItems.size
+                    viewModel.addCameraPhoto(photoBytes, gallerySaved = gallerySaved)
+                    photoAdded = viewModel.state.value.mediaItems.size > previousCount
+                }
+            } finally {
+                runCatching {
+                    withContext(NonCancellable + Dispatchers.IO) {
+                        file?.delete()
+                    }
+                }
+                onCameraOutputPathChange(null)
+            }
+            if (photoAdded && MediaAttachmentPolicy.availableSlots(viewModel.state.value.mediaItems.size) > 0) {
+                cameraCaptureRequest += 1
+            }
         }
-        file?.delete()
-        cameraOutput = null
+    }
+
+    LaunchedEffect(cameraCaptureRequest) {
+        if (cameraCaptureRequest == 0) return@LaunchedEffect
+        var file: File? = null
+        try {
+            val dir = File(context.cacheDir, "camera")
+            check(dir.isDirectory || dir.mkdirs())
+            val output = File(dir, "capture-${UUID.randomUUID()}.jpg")
+            file = output
+            onCameraOutputPathChange(output.absolutePath)
+            val uri = FileProvider.getUriForFile(
+                context, "com.armsone.starmanager.fileprovider", output
+            )
+            cameraLauncher.launch(uri)
+        } catch (_: Exception) {
+            runCatching { file?.delete() }
+            onCameraOutputPathChange(null)
+            viewModel.cameraUnavailable()
+        }
     }
 
     Column(
@@ -399,18 +474,19 @@ private fun CreationColumn(viewModel: ComposerViewModel, state: ComposerUiState)
                         enabled = MediaAttachmentPolicy.availableSlots(state.mediaItems.size) > 0,
                         onClick = {
                             val hasCamera = context.packageManager
-                                .hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY)
+                                .hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
                             if (!hasCamera) {
                                 viewModel.cameraUnavailable()
+                            } else if (
+                                Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
+                                ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                ) != PackageManager.PERMISSION_GRANTED
+                            ) {
+                                storagePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                             } else {
-                                val dir = File(context.cacheDir, "camera").apply { mkdirs() }
-                                val file = File(dir, "capture-${UUID.randomUUID()}.jpg")
-                                cameraOutput = file
-                                cameraLauncher.launch(
-                                    FileProvider.getUriForFile(
-                                        context, "com.armsone.starmanager.fileprovider", file
-                                    )
-                                )
+                                cameraCaptureRequest += 1
                             }
                         },
                         modifier = Modifier
@@ -945,6 +1021,56 @@ private fun makeVideoThumbnail(media: ComposerMedia, cacheDir: File): android.gr
         null
     } finally {
         file.delete()
+    }
+}
+
+private fun saveImageToGallery(context: Context, bytes: ByteArray): Boolean {
+    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+        if (ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return false
+        }
+    }
+    val resolver = context.contentResolver
+    val filename = "IMG_${System.currentTimeMillis()}.jpg"
+    val values = ContentValues().apply {
+        put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+        put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
+            put(MediaStore.Images.Media.IS_PENDING, 1)
+        }
+    }
+    val uri = runCatching {
+        resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+    }.getOrNull() ?: return false
+
+    return try {
+        val written = resolver.openOutputStream(uri)?.use { stream ->
+            stream.write(bytes)
+            stream.flush()
+            true
+        } ?: false
+        if (!written) {
+            runCatching { resolver.delete(uri, null, null) }
+            return false
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            values.clear()
+            values.put(MediaStore.Images.Media.IS_PENDING, 0)
+            val updated = resolver.update(uri, values, null, null)
+            if (updated == 0) {
+                runCatching { resolver.delete(uri, null, null) }
+                return false
+            }
+        }
+        true
+    } catch (_: Exception) {
+        runCatching { resolver.delete(uri, null, null) }
+        false
     }
 }
 
