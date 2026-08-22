@@ -78,7 +78,7 @@ class ComposerViewModel : ViewModel() {
     val trimmedIdea: String get() = _state.value.idea.trim()
 
     fun hasContent(): Boolean = _state.value.run {
-        idea.isNotEmpty() || generatedPost != null || mediaItems.isNotEmpty() || captionCandidates.isNotEmpty()
+        idea.isNotEmpty() || generatedPost != null || mediaItems.isNotEmpty() || captionCandidates.isNotEmpty() || pendingExternalProvider != null
     }
 
     fun resetComposer() {
@@ -510,5 +510,19 @@ class ComposerViewModel : ViewModel() {
     fun readClipboard(context: Context): String {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         return clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString() ?: ""
+    }
+
+    fun shouldShowPasteGuidance(context: Context): Boolean {
+        val prefs = context.getSharedPreferences("starmanager", Context.MODE_PRIVATE)
+        return !prefs.getBoolean(KEY_PASTE_GUIDANCE_SHOWN, false)
+    }
+
+    fun markPasteGuidanceShown(context: Context) {
+        val prefs = context.getSharedPreferences("starmanager", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(KEY_PASTE_GUIDANCE_SHOWN, true).apply()
+    }
+
+    companion object {
+        const val KEY_PASTE_GUIDANCE_SHOWN = "hasShownPasteGuidance"
     }
 }

@@ -73,6 +73,7 @@ class MainActivity : ComponentActivity() {
             storage.remove(CreatorProfileStore.STORAGE_KEY)
             storage.remove(CreatorProfileStore.PRESETS_STORAGE_KEY)
             storage.remove(CreatorProfileStore.DEFAULT_STYLE_VERSION_KEY)
+            storage.remove(ComposerViewModel.KEY_PASTE_GUIDANCE_SHOWN)
             FixtureHooks.resetStateRequested = false
         }
         val profileStore = CreatorProfileStore(storage)
@@ -106,7 +107,8 @@ private enum class AppTab(val title: String) {
 @Composable
 private fun StarManagerApp(profileStore: CreatorProfileStore) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
-    var showsResetConfirmation by remember { mutableStateOf(false) }
+    var showsResetConfirmation by rememberSaveable { mutableStateOf(false) }
+    var exitAfterReset by rememberSaveable { mutableStateOf(false) }
     val composerViewModel: ComposerViewModel = viewModel()
     composerViewModel.profileStore = profileStore
 
@@ -118,7 +120,20 @@ private fun StarManagerApp(profileStore: CreatorProfileStore) {
             .navigationBarsPadding()
     ) {
         // iOS inline 네비게이션 타이틀 근사치
-        TopBar(title = if (selectedTab == 0) "스타메니저" else "나의 취향")
+        TopBar(
+            title = if (selectedTab == 0) "스타메니저" else "나의 취향",
+            onCancel = if (selectedTab == 0) {
+                {
+                    if (composerViewModel.hasContent()) {
+                        exitAfterReset = true
+                        showsResetConfirmation = true
+                    } else {
+                        composerViewModel.resetComposer()
+                        selectedTab = 1
+                    }
+                }
+            } else null
+        )
 
         Box(Modifier.weight(1f)) {
             when (AppTab.entries[selectedTab]) {
@@ -129,29 +144,53 @@ private fun StarManagerApp(profileStore: CreatorProfileStore) {
 
         BottomTabBar(
             selectedIndex = selectedTab,
-            onSelect = { selectedTab = it },
+            onSelect = {
+                exitAfterReset = false
+                selectedTab = it
+            },
             onReset = {
+                exitAfterReset = false
                 selectedTab = 0
-                if (composerViewModel.hasContent()) showsResetConfirmation = true
+                if (composerViewModel.hasContent()) {
+                    showsResetConfirmation = true
+                } else {
+                    composerViewModel.resetComposer()
+                }
             }
         )
     }
 
     if (showsResetConfirmation) {
         AlertDialog(
-            onDismissRequest = { showsResetConfirmation = false },
+            onDismissRequest = {
+                showsResetConfirmation = false
+                exitAfterReset = false
+            },
             title = { Text("새 이야기로 시작할까요?") },
             text = { Text("현재 이야기, 만든 게시물과 미디어를 비웁니다. 내 프로필과 설정은 그대로 유지됩니다.") },
             confirmButton = {
-                TextButton(onClick = {
-                    composerViewModel.resetComposer()
-                    showsResetConfirmation = false
-                }) {
+                TextButton(
+                    onClick = {
+                        composerViewModel.resetComposer()
+                        showsResetConfirmation = false
+                        if (exitAfterReset) {
+                            selectedTab = 1
+                            exitAfterReset = false
+                        }
+                    },
+                    modifier = Modifier.testTag("composer.resetConfirm")
+                ) {
                     Text("새로 시작", color = BrandTheme.accent)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showsResetConfirmation = false }) {
+                TextButton(
+                    onClick = {
+                        showsResetConfirmation = false
+                        exitAfterReset = false
+                    },
+                    modifier = Modifier.testTag("composer.resetCancel")
+                ) {
                     Text("취소", color = BrandTheme.labelSecondary)
                 }
             }
@@ -160,7 +199,10 @@ private fun StarManagerApp(profileStore: CreatorProfileStore) {
 }
 
 @Composable
-private fun TopBar(title: String) {
+private fun TopBar(
+    title: String,
+    onCancel: (() -> Unit)? = null
+) {
     Column {
         Box(
             Modifier
@@ -169,6 +211,20 @@ private fun TopBar(title: String) {
                 .background(BrandTheme.canvas),
             contentAlignment = Alignment.Center
         ) {
+            if (onCancel != null) {
+                TextButton(
+                    onClick = onCancel,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .testTag("composer.cancel")
+                ) {
+                    Text(
+                        text = "취소",
+                        fontSize = 16.sp,
+                        color = BrandTheme.accent
+                    )
+                }
+            }
             Text(title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = BrandTheme.labelPrimary)
         }
         HorizontalDivider(color = Color(0x293C3C43), thickness = 0.5.dp)

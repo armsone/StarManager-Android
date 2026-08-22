@@ -81,6 +81,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -119,6 +120,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.armsone.starmanager.R
 import com.armsone.starmanager.design.BrandTheme
@@ -623,10 +627,43 @@ private fun BorderedActionButton(
 @Composable
 private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val trimmedIdeaEmpty = state.idea.trim().isEmpty()
     var selectedChoiceId by rememberSaveable { mutableStateOf(AIChoice.External(DirectAIProvider.OPEN_AI).id) }
     var confirmingProvider by remember { mutableStateOf<DirectAIProvider?>(null) }
     val selectedChoice = AIChoice.all.first { it.id == selectedChoiceId }
+    var isPasteGuidanceVisible by rememberSaveable { mutableStateOf(false) }
+
+    val pendingProvider = state.pendingExternalProvider
+
+    DisposableEffect(lifecycleOwner, pendingProvider) {
+        var departed = lifecycleOwner.lifecycle.currentState < Lifecycle.State.RESUMED
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> departed = true
+                Lifecycle.Event.ON_RESUME -> {
+                    if (departed && pendingProvider != null) {
+                        departed = false
+                        if (viewModel.shouldShowPasteGuidance(context)) {
+                            isPasteGuidanceVisible = true
+                            viewModel.markPasteGuidanceShown(context)
+                        }
+                    }
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    LaunchedEffect(pendingProvider) {
+        if (pendingProvider == null) {
+            isPasteGuidanceVisible = false
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         val columns = if (LocalDensity.current.fontScale >= 1.3f) 2 else 4
@@ -650,7 +687,16 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
             onClick = {
                 when (selectedChoice) {
                     AIChoice.OnDevice -> viewModel.generateDraft()
-                    is AIChoice.External -> confirmingProvider = selectedChoice.provider
+                    is AIChoice.External -> {
+                        if (selectedChoice.provider == DirectAIProvider.GEMINI) {
+                            val intent = viewModel.sharePrompt(DirectAIProvider.GEMINI, context)
+                            if (intent != null) {
+                                context.startActivity(android.content.Intent.createChooser(intent, null))
+                            }
+                        } else {
+                            confirmingProvider = selectedChoice.provider
+                        }
+                    }
                 }
             },
             enabled = !trimmedIdeaEmpty && !state.isGenerating,
@@ -677,8 +723,33 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
             )
         }
 
-        val provider = state.pendingExternalProvider
-        if (provider != null) {
+        if (pendingProvider != null) {
+            if (isPasteGuidanceVisible) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(BrandTheme.accent.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                        .border(1.dp, BrandTheme.accent.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                        .testTag("composer.pasteGuidance"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.Info,
+                        contentDescription = null,
+                        tint = BrandTheme.accent,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        "Android에는 별도의 붙여넣기 설정이 없습니다. 외부 앱에서 결과를 복사한 뒤 돌아와 [붙여넣기]를 누르면 바로 가져올 수 있습니다.",
+                        fontSize = 12.sp,
+                        color = BrandTheme.ink,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -686,7 +757,7 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
                     .background(BrandTheme.accent.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
                     .clickable {
                         val text = viewModel.readClipboard(context)
-                        viewModel.importAIResult(text, provider)
+                        viewModel.importAIResult(text, pendingProvider)
                     }
                     .testTag("composer.paste"),
                 horizontalArrangement = Arrangement.Center,
@@ -704,13 +775,13 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
         }
     }
 
-    val provider = confirmingProvider
-    if (provider != null) {
+    val dialogProvider = confirmingProvider
+    if (dialogProvider != null) {
         ExternalProviderConfirmDialog(
-            provider = provider,
+            provider = dialogProvider,
             onConfirm = {
                 confirmingProvider = null
-                val intent = viewModel.sharePrompt(provider, context)
+                val intent = viewModel.sharePrompt(dialogProvider, context)
                 if (intent != null) {
                     context.startActivity(android.content.Intent.createChooser(intent, null))
                 }
