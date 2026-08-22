@@ -1,10 +1,13 @@
 package com.armsone.starmanager
 
+import com.armsone.starmanager.model.AppAppearance
 import com.armsone.starmanager.model.CreatorProfile
 import com.armsone.starmanager.model.CreatorProfileStore
 import com.armsone.starmanager.model.GenerationControls
 import com.armsone.starmanager.model.GenerationStylePreset
 import com.armsone.starmanager.model.InMemoryKeyValueStore
+import com.armsone.starmanager.model.PostLength
+import com.armsone.starmanager.model.PostMood
 import com.armsone.starmanager.model.WritingPreset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -21,6 +24,70 @@ class CreatorProfileStoreTest {
         assertEquals("살아본 사람의 현실감은 살리되 정답을 강요하지 않고 유쾌하게", profile.voice)
         assertFalse(profile.usesEmoji)
         assertEquals(GenerationControls(200, 20, 25, 15, 25, 15), profile.controls)
+    }
+
+    @Test
+    fun `앱 외형 설정은 영속화된다`() {
+        val storage = InMemoryKeyValueStore()
+        val store = CreatorProfileStore(storage)
+        assertEquals(AppAppearance.BK, store.appearance.value)
+
+        store.setAppearance(AppAppearance.CLASSIC)
+        assertEquals(AppAppearance.CLASSIC, store.appearance.value)
+        assertEquals("CLASSIC", storage.getString("appAppearance"))
+
+        val reloaded = CreatorProfileStore(storage)
+        assertEquals(AppAppearance.CLASSIC, reloaded.appearance.value)
+
+        reloaded.setAppearance(AppAppearance.BK)
+        assertEquals("BK", storage.getString("appAppearance"))
+    }
+
+    @Test
+    fun `분위기와 이야기 비중 설정이 영속화된다`() {
+        val storage = InMemoryKeyValueStore()
+        val store = CreatorProfileStore(storage)
+        store.updateProfile { it.copy(mood = PostMood.WARM, preferredLength = PostLength.SHORT) }
+
+        val reloaded = CreatorProfileStore(storage)
+        assertEquals(PostMood.WARM, reloaded.profile.value.mood)
+        assertEquals(PostLength.SHORT, reloaded.profile.value.preferredLength)
+    }
+
+    @Test
+    fun `스타일 프리셋 적용 시 selectedGenerationStyle이 갱신된다`() {
+        val storage = InMemoryKeyValueStore()
+        val store = CreatorProfileStore(storage)
+        store.applyGenerationStyle(GenerationStylePreset.MZ)
+
+        assertEquals(GenerationStylePreset.MZ, store.profile.value.selectedGenerationStyle)
+        val reloaded = CreatorProfileStore(storage)
+        assertEquals(GenerationStylePreset.MZ, reloaded.profile.value.selectedGenerationStyle)
+    }
+
+    @Test
+    fun `프리셋 저장 및 적용 시 분위기와 스타일이 보존된다`() {
+        val storage = InMemoryKeyValueStore()
+        val store = CreatorProfileStore(storage)
+        store.updateProfile {
+            it.copy(
+                mood = PostMood.CALM,
+                preferredLength = PostLength.LONG,
+                selectedGenerationStyle = GenerationStylePreset.GEN_X
+            )
+        }
+        store.savePreset("X세대 차분한 톤")
+
+        val preset = store.presets.value.first { it.name == "X세대 차분한 톤" }
+        assertEquals(PostMood.CALM, preset.mood)
+        assertEquals(GenerationStylePreset.GEN_X, preset.selectedGenerationStyle)
+
+        // 프로필 변경 후 프리셋 적용
+        store.updateProfile { it.copy(mood = PostMood.WITTY, selectedGenerationStyle = GenerationStylePreset.MZ) }
+        store.apply(preset)
+
+        assertEquals(PostMood.CALM, store.profile.value.mood)
+        assertEquals(GenerationStylePreset.GEN_X, store.profile.value.selectedGenerationStyle)
     }
 
     @Test

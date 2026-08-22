@@ -1,5 +1,7 @@
 package com.armsone.starmanager
 
+import android.content.ComponentName
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,10 +20,12 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -29,6 +34,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -45,8 +52,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.armsone.starmanager.design.BrandTheme
+import com.armsone.starmanager.design.IconWell
+import com.armsone.starmanager.design.IconWellVariant
+import com.armsone.starmanager.design.LocalAppAppearance
+import com.armsone.starmanager.model.AppAppearance
 import com.armsone.starmanager.model.CreatorProfileStore
 import com.armsone.starmanager.model.SharedPreferencesKeyValueStore
 import com.armsone.starmanager.ui.composer.ComposerScreen
@@ -73,27 +85,52 @@ class MainActivity : ComponentActivity() {
             storage.remove(CreatorProfileStore.STORAGE_KEY)
             storage.remove(CreatorProfileStore.PRESETS_STORAGE_KEY)
             storage.remove(CreatorProfileStore.DEFAULT_STYLE_VERSION_KEY)
+            storage.remove(CreatorProfileStore.APPEARANCE_STORAGE_KEY)
             storage.remove(ComposerViewModel.KEY_PASTE_GUIDANCE_SHOWN)
             FixtureHooks.resetStateRequested = false
         }
         val profileStore = CreatorProfileStore(storage)
 
         setContent {
-            StarManagerTheme {
-                StarManagerApp(profileStore)
+            val appearance by profileStore.appearance.collectAsStateWithLifecycle()
+            LaunchedEffect(appearance) {
+                updateLauncherIcon(appearance)
+            }
+            CompositionLocalProvider(LocalAppAppearance provides appearance) {
+                StarManagerTheme(appearance = appearance) {
+                    StarManagerApp(profileStore)
+                }
             }
         }
+    }
+
+    private fun updateLauncherIcon(appearance: AppAppearance) {
+        val selected = if (appearance == AppAppearance.CLASSIC) "ClassicIconAlias" else "BkIconAlias"
+        val other = if (appearance == AppAppearance.CLASSIC) "BkIconAlias" else "ClassicIconAlias"
+        packageManager.setComponentEnabledSetting(
+            ComponentName(packageName, "$packageName.$selected"),
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+            PackageManager.DONT_KILL_APP
+        )
+        packageManager.setComponentEnabledSetting(
+            ComponentName(packageName, "$packageName.$other"),
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP
+        )
     }
 }
 
 /** iOS는 preferredColorScheme(.light) — 다크 모드와 무관하게 라이트 팔레트를 강제한다. */
 @Composable
-fun StarManagerTheme(content: @Composable () -> Unit) {
+fun StarManagerTheme(
+    appearance: AppAppearance = LocalAppAppearance.current,
+    content: @Composable () -> Unit
+) {
     MaterialTheme(
         colorScheme = lightColorScheme(
             primary = BrandTheme.accent,
-            background = BrandTheme.canvas,
-            surface = Color.White
+            background = BrandTheme.canvas(appearance),
+            surface = BrandTheme.surface(appearance)
         ),
         content = content
     )
@@ -106,6 +143,7 @@ private enum class AppTab(val title: String) {
 
 @Composable
 private fun StarManagerApp(profileStore: CreatorProfileStore) {
+    val appearance = LocalAppAppearance.current
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var showsResetConfirmation by rememberSaveable { mutableStateOf(false) }
     var exitAfterReset by rememberSaveable { mutableStateOf(false) }
@@ -115,13 +153,15 @@ private fun StarManagerApp(profileStore: CreatorProfileStore) {
     Column(
         Modifier
             .fillMaxSize()
-            .background(BrandTheme.canvas)
+            .background(BrandTheme.canvas(appearance))
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        // iOS inline 네비게이션 타이틀 근사치
+        // 인라인 네비게이션 타이틀 + 선행 아이콘 웰
         TopBar(
             title = if (selectedTab == 0) "스타메니저" else "나의 취향",
+            icon = if (selectedTab == 0) Icons.Filled.AutoAwesome else Icons.Filled.Tune,
+            appearance = appearance,
             onCancel = if (selectedTab == 0) {
                 {
                     if (composerViewModel.hasContent()) {
@@ -144,6 +184,7 @@ private fun StarManagerApp(profileStore: CreatorProfileStore) {
 
         BottomTabBar(
             selectedIndex = selectedTab,
+            appearance = appearance,
             onSelect = {
                 exitAfterReset = false
                 selectedTab = it
@@ -191,7 +232,7 @@ private fun StarManagerApp(profileStore: CreatorProfileStore) {
                     },
                     modifier = Modifier.testTag("composer.resetCancel")
                 ) {
-                    Text("취소", color = BrandTheme.labelSecondary)
+                    Text("취소", color = BrandTheme.labelSecondary(appearance))
                 }
             }
         )
@@ -201,14 +242,16 @@ private fun StarManagerApp(profileStore: CreatorProfileStore) {
 @Composable
 private fun TopBar(
     title: String,
+    icon: ImageVector,
+    appearance: AppAppearance = LocalAppAppearance.current,
     onCancel: (() -> Unit)? = null
 ) {
     Column {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(44.dp)
-                .background(BrandTheme.canvas),
+                .height(48.dp)
+                .background(BrandTheme.canvas(appearance)),
             contentAlignment = Alignment.Center
         ) {
             if (onCancel != null) {
@@ -225,27 +268,56 @@ private fun TopBar(
                     )
                 }
             }
-            Text(title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = BrandTheme.labelPrimary)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                if (appearance == AppAppearance.BK) {
+                    IconWell(
+                        icon = icon,
+                        appearance = appearance,
+                        variant = if (title == "나의 취향") IconWellVariant.OXBLOOD else IconWellVariant.CARBON,
+                        size = 24.dp,
+                        iconSize = 14.dp
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(
+                    title,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = BrandTheme.labelPrimary(appearance)
+                )
+            }
         }
-        HorizontalDivider(color = Color(0x293C3C43), thickness = 0.5.dp)
+        HorizontalDivider(color = BrandTheme.divider(appearance), thickness = 0.5.dp)
     }
 }
 
-/** iOS 탭바 근사치 — sparkles/person.crop.circle 대신 앱 소유 근사 아이콘 사용. */
+/** 탭바 — 스튜디오/새 캔버스/나의 취향 */
 @Composable
-private fun BottomTabBar(selectedIndex: Int, onSelect: (Int) -> Unit, onReset: () -> Unit) {
+private fun BottomTabBar(
+    selectedIndex: Int,
+    appearance: AppAppearance = LocalAppAppearance.current,
+    onSelect: (Int) -> Unit,
+    onReset: () -> Unit
+) {
+    val isBk = appearance == AppAppearance.BK
+    val background = if (isBk) Color.White else Color.White.copy(alpha = 0.98f)
+
     Column {
-        HorizontalDivider(color = Color(0x293C3C43), thickness = 0.5.dp)
+        HorizontalDivider(color = BrandTheme.divider(appearance), thickness = 0.5.dp)
         Row(
             Modifier
                 .fillMaxWidth()
                 .height(52.dp)
-                .background(Color.White.copy(alpha = 0.98f))
+                .background(background)
         ) {
             BottomTabButton(
                 title = AppTab.COMPOSER.title,
                 icon = tabIcon(AppTab.COMPOSER),
                 selected = selectedIndex == 0,
+                appearance = appearance,
                 onClick = { onSelect(0) },
                 testTag = "tab.COMPOSER",
                 modifier = Modifier.weight(1f)
@@ -254,6 +326,7 @@ private fun BottomTabBar(selectedIndex: Int, onSelect: (Int) -> Unit, onReset: (
                 title = "새 캔버스",
                 icon = Icons.Filled.RestartAlt,
                 selected = false,
+                appearance = appearance,
                 onClick = onReset,
                 testTag = "tab.RESET",
                 modifier = Modifier.weight(1f)
@@ -262,6 +335,7 @@ private fun BottomTabBar(selectedIndex: Int, onSelect: (Int) -> Unit, onReset: (
                 title = AppTab.SETTINGS.title,
                 icon = tabIcon(AppTab.SETTINGS),
                 selected = selectedIndex == 1,
+                appearance = appearance,
                 onClick = { onSelect(1) },
                 testTag = "tab.SETTINGS",
                 modifier = Modifier.weight(1f)
@@ -275,31 +349,37 @@ private fun BottomTabButton(
     title: String,
     icon: ImageVector,
     selected: Boolean,
+    appearance: AppAppearance,
     onClick: () -> Unit,
     testTag: String,
     modifier: Modifier = Modifier
 ) {
-    val tint = if (selected) BrandTheme.accent else Color(0xFF77736F)
-                Column(
-                    modifier
-                        .fillMaxSize()
-                        .semantics { this.selected = selected }
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) { onClick() }
-                        .testTag(testTag),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        icon,
-                        contentDescription = title,
-                        tint = tint,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Text(title, fontSize = 10.sp, color = tint)
-                }
+    val tint = if (selected) {
+        BrandTheme.accent
+    } else {
+        if (appearance == AppAppearance.BK) BrandTheme.bkLabelSecondary else Color(0xFF77736F)
+    }
+
+    Column(
+        modifier
+            .fillMaxSize()
+            .semantics { this.selected = selected }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onClick() }
+            .testTag(testTag),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            icon,
+            contentDescription = title,
+            tint = tint,
+            modifier = Modifier.size(24.dp)
+        )
+        Text(title, fontSize = 10.sp, color = tint, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+    }
 }
 
 private fun tabIcon(tab: AppTab): ImageVector = when (tab) {

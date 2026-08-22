@@ -39,6 +39,19 @@ class InMemoryKeyValueStore : KeyValueStore {
     override fun remove(key: String) { strings.remove(key); ints.remove(key) }
 }
 
+/** 앱 외형 테마: BK(기본)와 클래식 2가지 선택지 제공. */
+enum class AppAppearance(val title: String) {
+    BK("BK"),
+    CLASSIC("클래식");
+
+    companion object {
+        fun fromString(value: String?): AppAppearance = when (value?.uppercase()) {
+            "CLASSIC", "클래식" -> CLASSIC
+            else -> BK
+        }
+    }
+}
+
 /**
  * iOS CreatorProfileStore 포팅.
  * 프로필과 프리셋은 변경 즉시 저장되고, 최초 실행(또는 버전 미달) 시
@@ -48,6 +61,9 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
 
     private val gson = Gson()
 
+    private val _appearance: MutableStateFlow<AppAppearance>
+    val appearance: StateFlow<AppAppearance> get() = _appearance.asStateFlow()
+
     private val _profile: MutableStateFlow<CreatorProfile>
     val profile: StateFlow<CreatorProfile> get() = _profile.asStateFlow()
 
@@ -55,6 +71,8 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
     val presets: StateFlow<List<WritingPreset>> get() = _presets.asStateFlow()
 
     init {
+        val storedAppearance = storage.getString(APPEARANCE_STORAGE_KEY)
+        _appearance = MutableStateFlow(AppAppearance.fromString(storedAppearance))
         val storedPresets = storage.getString(PRESETS_STORAGE_KEY)?.let { json ->
             runCatching {
                 gson.fromJson<List<WritingPreset>>(
@@ -90,6 +108,10 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
         it.copy(writingGuidelines = CreatorProfile.DEFAULT_WRITING_GUIDELINES)
     }
 
+    fun applyGenerationStyle(preset: GenerationStylePreset) {
+        setProfile(preset.applyingTo(_profile.value))
+    }
+
     fun savePreset(rawName: String) {
         val name = rawName.trim()
         if (name.isEmpty()) return
@@ -105,7 +127,9 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
             preferredLength = current.preferredLength,
             usesEmoji = current.usesEmoji,
             prohibitedPhrases = current.prohibitedPhrases,
-            hashtagStyle = current.hashtagStyle
+            hashtagStyle = current.hashtagStyle,
+            mood = current.mood,
+            selectedGenerationStyle = current.selectedGenerationStyle
         )
         _presets.value = _presets.value.filter { it.name != name } + preset
         savePresets()
@@ -124,6 +148,8 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
         preset.usesEmoji?.let { updated = updated.copy(usesEmoji = it) }
         preset.prohibitedPhrases?.let { updated = updated.copy(prohibitedPhrases = it) }
         preset.hashtagStyle?.let { updated = updated.copy(hashtagStyle = it) }
+        preset.mood?.let { updated = updated.copy(mood = it) }
+        preset.selectedGenerationStyle?.let { updated = updated.copy(selectedGenerationStyle = it) }
         updated
     }
 
@@ -141,6 +167,11 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
         if (index >= 0) deletePreset(index)
     }
 
+    fun setAppearance(appearance: AppAppearance) {
+        _appearance.value = appearance
+        storage.putString(APPEARANCE_STORAGE_KEY, appearance.name)
+    }
+
     private fun save() {
         storage.putString(STORAGE_KEY, gson.toJson(_profile.value))
     }
@@ -154,5 +185,6 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
         const val PRESETS_STORAGE_KEY = "writingPresets"
         const val DEFAULT_STYLE_VERSION_KEY = "defaultGenerationStyleVersion"
         const val CURRENT_DEFAULT_STYLE_VERSION = 1
+        const val APPEARANCE_STORAGE_KEY = "appAppearance"
     }
 }

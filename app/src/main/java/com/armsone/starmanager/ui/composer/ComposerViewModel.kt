@@ -35,8 +35,6 @@ import java.util.UUID
 
 data class ComposerUiState(
     val idea: String = "",
-    val mood: PostMood = PostMood.WITTY,
-    val length: PostLength = PostLength.MEDIUM,
     val generatedPost: GeneratedPost? = null,
     val isGenerating: Boolean = false,
     val errorMessage: String? = null,
@@ -47,7 +45,6 @@ data class ComposerUiState(
     val isPreparingShare: Boolean = false,
     val shareMessage: String? = null,
     val shareMessageIsError: Boolean = false,
-    val selectedGenerationStyle: GenerationStylePreset? = GenerationStylePreset.GENERATION_386,
     val generatedSignature: DraftSignature? = null,
     val activeCaptionSource: CaptionSource? = null,
     val captionCandidates: Map<CaptionSource, CaptionCandidate> = emptyMap(),
@@ -71,8 +68,8 @@ class ComposerViewModel : ViewModel() {
     // MARK: - 입력
 
     fun setIdea(value: String) = update { it.copy(idea = value) }
-    fun setMood(value: PostMood) = update { it.copy(mood = value) }
-    fun setLength(value: PostLength) = update { it.copy(length = value) }
+    fun setMood(value: PostMood) = profileStore.updateProfile { it.copy(mood = value) }
+    fun setLength(value: PostLength) = profileStore.updateProfile { it.copy(preferredLength = value) }
     fun setPreviewAspect(value: PreviewAspect) = update { it.copy(previewAspect = value) }
 
     val trimmedIdea: String get() = _state.value.idea.trim()
@@ -106,10 +103,9 @@ class ComposerViewModel : ViewModel() {
     }
 
     fun applyGenerationStyle(preset: GenerationStylePreset) {
-        profileStore.setProfile(preset.applyingTo(profileStore.profile.value))
+        profileStore.applyGenerationStyle(preset)
         update {
             it.copy(
-                selectedGenerationStyle = preset,
                 statusMessage = "${preset.title} 적용",
                 errorMessage = null
             )
@@ -124,12 +120,15 @@ class ComposerViewModel : ViewModel() {
 
     // MARK: - 초안 상태
 
-    fun currentDraftSignature(): DraftSignature = DraftSignature(
-        idea = trimmedIdea,
-        mood = _state.value.mood,
-        length = _state.value.length,
-        profile = profileStore.profile.value
-    )
+    fun currentDraftSignature(): DraftSignature {
+        val profile = profileStore.profile.value
+        return DraftSignature(
+            idea = trimmedIdea,
+            mood = profile.mood,
+            length = profile.preferredLength,
+            profile = profile
+        )
+    }
 
     fun draftIsCurrent(): Boolean =
         _state.value.generatedSignature == currentDraftSignature()
@@ -217,12 +216,15 @@ class ComposerViewModel : ViewModel() {
 
     // MARK: - 외부 AI 프롬프트 공유/가져오기
 
-    fun externalPrompt(): String = ExternalPromptBuilder.build(
-        profileStore.profile.value,
-        trimmedIdea,
-        _state.value.mood,
-        _state.value.length
-    )
+    fun externalPrompt(): String {
+        val profile = profileStore.profile.value
+        return ExternalPromptBuilder.build(
+            profile,
+            trimmedIdea,
+            profile.mood,
+            profile.preferredLength
+        )
+    }
 
     /** 요청문을 클립보드에 복사하고 공유 인텐트를 돌려준다. */
     fun sharePrompt(provider: DirectAIProvider, context: Context): Intent? {

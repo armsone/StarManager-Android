@@ -16,6 +16,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -127,9 +128,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.armsone.starmanager.R
 import com.armsone.starmanager.design.BrandTheme
 import com.armsone.starmanager.design.GlossyPrimaryButton
+import com.armsone.starmanager.design.IconWell
+import com.armsone.starmanager.design.IconWellVariant
+import com.armsone.starmanager.design.LocalAppAppearance
 import com.armsone.starmanager.design.StarSegmentedControl
 import com.armsone.starmanager.design.StarSlider
+import com.armsone.starmanager.design.oxbloodPreferenceCard
 import com.armsone.starmanager.design.starCard
+import com.armsone.starmanager.model.AppAppearance
 import com.armsone.starmanager.model.GenerationStylePreset
 import com.armsone.starmanager.model.PostLength
 import com.armsone.starmanager.model.PostMood
@@ -145,12 +151,13 @@ import java.util.UUID
 fun ComposerScreen(viewModel: ComposerViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val scrollState = rememberScrollState()
+    val appearance = LocalAppAppearance.current
     var cameraOutputPath by rememberSaveable { mutableStateOf<String?>(null) }
 
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .background(BrandTheme.canvasGradient)
+            .background(BrandTheme.canvasBrush(appearance))
     ) {
         // iOS horizontalSizeClass == .regular 대응: 600dp 이상이면 2열.
         val isRegular = maxWidth >= 600.dp
@@ -203,6 +210,7 @@ private fun CreationColumn(
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
+    val appearance = LocalAppAppearance.current
     val profile by viewModel.profileStore.profile.collectAsStateWithLifecycle()
 
     val maxSelection = maxOf(1, MediaAttachmentPolicy.availableSlots(state.mediaItems.size))
@@ -324,104 +332,34 @@ private fun CreationColumn(
         Modifier
             .widthIn(max = 540.dp)
             .fillMaxWidth()
-            .starCard()
+            .starCard(appearance)
             .testTag("composer.creationCard"),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Text(
-            "오늘 어떤 이야기를 전할까요?",
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            lineHeight = 28.sp,
-            maxLines = 2
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconWell(
+                icon = Icons.Filled.AutoAwesome,
+                appearance = appearance,
+                size = 28.dp,
+                iconSize = 16.dp
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "오늘 어떤 이야기를 전할까요?",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = BrandTheme.labelPrimary(appearance),
+                lineHeight = 26.sp,
+                maxLines = 2
+            )
+        }
 
         IdeaField(
             value = state.idea,
             onValueChange = viewModel::setIdea,
+            appearance = appearance,
             modifier = Modifier.testTag("composer.idea")
         )
-
-        var showsFeelAdjustment by remember { mutableStateOf(false) }
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            DisclosureHeader(
-                title = "느낌 조정",
-                icon = Icons.Filled.Tune,
-                expanded = showsFeelAdjustment,
-                onToggle = { showsFeelAdjustment = !showsFeelAdjustment },
-                testTag = "composer.feelAdjustmentDisclosure"
-            )
-            AnimatedVisibility(visible = showsFeelAdjustment) {
-                Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("스타일", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                        val columns = if (LocalDensity.current.fontScale >= 1.3f) 1 else 4
-                        GenerationStylePreset.entries.chunked(columns).forEach { rowPresets ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                rowPresets.forEach { preset ->
-                                    StyleButton(
-                                        preset = preset,
-                                        selected = state.selectedGenerationStyle == preset,
-                                        onClick = {
-                                            focusManager.clearFocus()
-                                            viewModel.applyGenerationStyle(preset)
-                                        },
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .testTag("composer.style.${preset.rawValue}")
-                                    )
-                                }
-                                repeat(columns - rowPresets.size) { Spacer(Modifier.weight(1f)) }
-                            }
-                        }
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("분위기", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(70.dp))
-                        StarSegmentedControl(
-                            options = PostMood.entries.map { it.rawValue },
-                            selectedIndex = PostMood.entries.indexOf(state.mood),
-                            onSelect = { viewModel.setMood(PostMood.entries[it]) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("composer.mood")
-                        )
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("이야기 비중", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(70.dp))
-                        StarSegmentedControl(
-                            options = PostLength.entries.map { it.storyWeightTitle },
-                            selectedIndex = PostLength.entries.indexOf(state.length),
-                            onSelect = { viewModel.setLength(PostLength.entries[it]) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("composer.length")
-                        )
-                    }
-
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("글자 수", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                            Spacer(Modifier.weight(1f))
-                            Text(
-                                "${profile.controls.characterCount}자",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = BrandTheme.accent
-                            )
-                        }
-                        StarSlider(
-                            value = profile.controls.characterCount.toFloat(),
-                            onValueChange = { viewModel.setCharacterCount((Math.round(it / 10f) * 10)) },
-                            valueRange = 50f..500f,
-                            step = 10f,
-                            modifier = Modifier.testTag("composer.slider.characterCount")
-                        )
-                    }
-                }
-            }
-        }
 
         AiChoiceButtons(viewModel, state)
 
@@ -448,11 +386,21 @@ private fun CreationColumn(
                     ),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("미디어", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconWell(
+                        icon = Icons.Filled.PhotoLibrary,
+                        appearance = appearance,
+                        size = 24.dp,
+                        iconSize = 14.dp
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("미디어", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = BrandTheme.labelPrimary(appearance))
+                }
 
                 StarSegmentedControl(
                     options = PreviewAspect.entries.map { it.title },
                     selectedIndex = PreviewAspect.entries.indexOf(state.previewAspect),
+                    appearance = appearance,
                     onSelect = { viewModel.setPreviewAspect(PreviewAspect.entries[it]) },
                     modifier = Modifier.testTag("composer.aspect")
                 )
@@ -463,6 +411,7 @@ private fun CreationColumn(
                         icon = if (state.mediaItems.isEmpty()) Icons.Filled.AddPhotoAlternate else Icons.Filled.CheckCircle,
                         enabled = !state.isLoadingMedia &&
                             MediaAttachmentPolicy.availableSlots(state.mediaItems.size) > 0,
+                        appearance = appearance,
                         onClick = {
                             photoPicker.launch(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
@@ -476,6 +425,7 @@ private fun CreationColumn(
                         title = "카메라",
                         icon = Icons.Filled.PhotoCamera,
                         enabled = MediaAttachmentPolicy.availableSlots(state.mediaItems.size) > 0,
+                        appearance = appearance,
                         onClick = {
                             val hasCamera = context.packageManager
                                 .hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
@@ -526,20 +476,31 @@ private fun CreationColumn(
 }
 
 @Composable
-private fun IdeaField(value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier) {
+private fun IdeaField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    appearance: AppAppearance = LocalAppAppearance.current
+) {
+    val isBk = appearance == AppAppearance.BK
+    val shape = RoundedCornerShape(14.dp)
+    val bg = if (isBk) Color(0xFFF6F8FA) else BrandTheme.canvas
+    val border = if (isBk) BorderStroke(1.dp, Color(0xFFE2E6EC)) else null
+
     Box(
         modifier
             .fillMaxWidth()
-            .background(BrandTheme.canvas, RoundedCornerShape(14.dp))
+            .then(if (border != null) Modifier.border(border, shape) else Modifier)
+            .background(bg, shape)
             .padding(14.dp)
     ) {
         if (value.isEmpty()) {
-            Text("한 줄로 적어 주세요", fontSize = 17.sp, color = BrandTheme.labelSecondary)
+            Text("한 줄로 적어 주세요", fontSize = 17.sp, color = BrandTheme.labelSecondary(appearance))
         }
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
-            textStyle = TextStyle(fontSize = 17.sp, color = BrandTheme.labelPrimary),
+            textStyle = TextStyle(fontSize = 17.sp, color = BrandTheme.labelPrimary(appearance)),
             minLines = 2,
             maxLines = 5,
             modifier = Modifier.fillMaxWidth()
@@ -552,33 +513,42 @@ private fun StyleButton(
     preset: GenerationStylePreset,
     selected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    appearance: AppAppearance = LocalAppAppearance.current
 ) {
+    val isBk = appearance == AppAppearance.BK
     val shape = RoundedCornerShape(14.dp)
+    val bg = if (isBk) {
+        if (selected) Color.White else Color(0xFFF1F3F6)
+    } else {
+        if (selected) BrandTheme.paper else BrandTheme.canvas
+    }
+    val borderStroke = if (selected) {
+        BorderStroke(1.5.dp, BrandTheme.accent)
+    } else {
+        if (isBk) BorderStroke(1.dp, Color(0xFFE2E6EC)) else null
+    }
+
     Column(
         modifier = modifier
             .heightIn(min = 58.dp)
-            .background(if (selected) BrandTheme.paper else BrandTheme.canvas, shape)
-            .border(1.5.dp, if (selected) BrandTheme.accent else Color.Transparent, shape)
+            .then(if (borderStroke != null) Modifier.border(borderStroke, shape) else Modifier)
+            .background(bg, shape)
             .clickable(onClick = onClick)
             .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        Box(
-            Modifier
-                .size(30.dp)
-                .background(BrandTheme.paper, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                presetIcon(preset),
-                contentDescription = null,
-                tint = BrandTheme.accent,
-                modifier = Modifier.size(17.dp)
-            )
-        }
-        Text(preset.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        IconWell(
+            icon = presetIcon(preset),
+            appearance = appearance,
+            variant = if (isBk) {
+                if (selected) IconWellVariant.OXBLOOD else IconWellVariant.CARBON
+            } else IconWellVariant.CARBON,
+            size = 28.dp,
+            iconSize = 16.dp
+        )
+        Text(preset.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = BrandTheme.labelPrimary(appearance))
     }
 }
 
@@ -595,13 +565,30 @@ private fun BorderedActionButton(
     icon: ImageVector,
     enabled: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    appearance: AppAppearance = LocalAppAppearance.current
 ) {
+    val isBk = appearance == AppAppearance.BK
     val shape = RoundedCornerShape(12.dp)
+    val bg = if (isBk) {
+        if (enabled) Color(0xFFF1F3F6) else Color(0xFFF6F7F9)
+    } else {
+        BrandTheme.accent.copy(alpha = if (enabled) 0.12f else 0.06f)
+    }
+    val borderStroke = if (isBk) {
+        BorderStroke(1.dp, if (enabled) Color(0xFFD8DCE3) else Color(0xFFE5E8EE))
+    } else null
+    val contentColor = if (isBk) {
+        if (enabled) BrandTheme.bkCarbonDark else BrandTheme.bkLabelSecondary
+    } else {
+        BrandTheme.accent.copy(alpha = if (enabled) 1f else 0.4f)
+    }
+
     Row(
         modifier = modifier
             .height(44.dp)
-            .background(BrandTheme.accent.copy(alpha = if (enabled) 0.12f else 0.06f), shape)
+            .then(if (borderStroke != null) Modifier.border(borderStroke, shape) else Modifier)
+            .background(bg, shape)
             .clickable(enabled = enabled, onClick = onClick),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
@@ -609,7 +596,7 @@ private fun BorderedActionButton(
         Icon(
             icon,
             contentDescription = null,
-            tint = BrandTheme.accent.copy(alpha = if (enabled) 1f else 0.4f),
+            tint = contentColor,
             modifier = Modifier.size(18.dp)
         )
         Spacer(Modifier.width(6.dp))
@@ -617,7 +604,7 @@ private fun BorderedActionButton(
             title,
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
-            color = BrandTheme.accent.copy(alpha = if (enabled) 1f else 0.4f)
+            color = contentColor
         )
     }
 }
@@ -796,14 +783,27 @@ private fun AIChoiceCard(
     choice: AIChoice,
     selected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    appearance: AppAppearance = LocalAppAppearance.current
 ) {
+    val isBk = appearance == AppAppearance.BK
     val shape = RoundedCornerShape(13.dp)
+    val bg = if (isBk) {
+        if (selected) Color.White else Color(0xFFF7F8FA)
+    } else {
+        if (selected) BrandTheme.paper else BrandTheme.surface
+    }
+    val border = if (selected) {
+        BorderStroke(1.5.dp, BrandTheme.accent)
+    } else {
+        BorderStroke(1.dp, if (isBk) Color(0xFFE2E6EC) else BrandTheme.border)
+    }
+
     Column(
         modifier = modifier
             .heightIn(min = 72.dp)
-            .background(if (selected) BrandTheme.paper else BrandTheme.surface, shape)
-            .border(if (selected) 1.5.dp else 1.dp, if (selected) BrandTheme.accent else BrandTheme.border, shape)
+            .border(border, shape)
+            .background(bg, shape)
             .semantics { this.selected = selected }
             .clickable(onClick = onClick)
             .padding(horizontal = 5.dp, vertical = 9.dp),
@@ -811,11 +811,12 @@ private fun AIChoiceCard(
         verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
         when (choice) {
-            AIChoice.OnDevice -> Icon(
-                Icons.Filled.AutoAwesome,
-                contentDescription = null,
-                tint = BrandTheme.ink,
-                modifier = Modifier.size(26.dp)
+            AIChoice.OnDevice -> IconWell(
+                icon = Icons.Filled.AutoAwesome,
+                appearance = appearance,
+                variant = if (selected) IconWellVariant.ACCENT else IconWellVariant.CARBON,
+                size = 28.dp,
+                iconSize = 18.dp
             )
             is AIChoice.External -> BrandIcon(choice.provider)
         }
@@ -823,7 +824,7 @@ private fun AIChoiceCard(
             choice.title,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
-            color = BrandTheme.ink,
+            color = BrandTheme.labelPrimary(appearance),
             maxLines = 1
         )
     }
@@ -862,24 +863,33 @@ private fun DisclosureHeader(
     onToggle: () -> Unit,
     testTag: String,
     icon: ImageVector? = null,
+    appearance: AppAppearance = LocalAppAppearance.current,
+    variant: IconWellVariant = IconWellVariant.CARBON,
     titleFontSize: androidx.compose.ui.unit.TextUnit = 15.sp,
-    titleColor: Color = BrandTheme.ink
+    titleColor: Color = BrandTheme.labelPrimary(appearance)
 ) {
     Row(
         Modifier
             .clickable(onClick = onToggle)
             .testTag(testTag),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (icon != null) {
-            Icon(icon, contentDescription = null, tint = titleColor, modifier = Modifier.size(16.dp))
+            IconWell(
+                icon = icon,
+                appearance = appearance,
+                variant = variant,
+                size = 24.dp,
+                iconSize = 14.dp
+            )
         }
         Text(title, fontSize = titleFontSize, fontWeight = FontWeight.SemiBold, color = titleColor)
+        Spacer(Modifier.weight(1f))
         Icon(
             if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
             contentDescription = null,
-            tint = titleColor,
+            tint = BrandTheme.labelSecondary(appearance),
             modifier = Modifier.size(18.dp)
         )
     }
@@ -911,6 +921,7 @@ private fun BrandIcon(provider: DirectAIProvider) {
 @Composable
 private fun MediaOrderEditor(viewModel: ComposerViewModel, state: ComposerUiState) {
     val density = LocalDensity.current
+    val appearance = LocalAppAppearance.current
     val itemSlotPx = with(density) { (104.dp + 10.dp).toPx() }
     var draggingId by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
@@ -918,11 +929,21 @@ private fun MediaOrderEditor(viewModel: ComposerViewModel, state: ComposerUiStat
     Column(
         Modifier
             .fillMaxWidth()
-            .background(BrandTheme.canvas, RoundedCornerShape(14.dp))
+            .background(if (appearance == AppAppearance.BK) Color(0xFFF1F3F6) else BrandTheme.canvas, RoundedCornerShape(14.dp))
+            .then(if (appearance == AppAppearance.BK) Modifier.border(BorderStroke(1.dp, Color(0xFFE2E6EC)), RoundedCornerShape(14.dp)) else Modifier)
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text("길게 눌러 순서 변경", fontSize = 12.sp, color = BrandTheme.labelSecondary)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconWell(
+                icon = Icons.Filled.Tune,
+                appearance = appearance,
+                size = 20.dp,
+                iconSize = 12.dp
+            )
+            Spacer(Modifier.width(6.dp))
+            Text("길게 눌러 순서 변경", fontSize = 12.sp, color = BrandTheme.labelSecondary(appearance))
+        }
 
         Row(
             Modifier
@@ -1033,6 +1054,8 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 @Composable
 private fun MediaThumbnail(media: ComposerMedia) {
     val context = LocalContext.current
+    val appearance = LocalAppAppearance.current
+    val isBk = appearance == AppAppearance.BK
     val shape = RoundedCornerShape(14.dp)
     val imageBitmap by produceState<android.graphics.Bitmap?>(initialValue = null, media.id) {
         value = withContext(Dispatchers.IO) {
@@ -1047,8 +1070,8 @@ private fun MediaThumbnail(media: ComposerMedia) {
     Box(
         Modifier
             .size(width = 104.dp, height = 118.dp)
-            .background(BrandTheme.paper, shape)
-            .border(1.dp, Color.Black.copy(alpha = 0.09f), shape)
+            .background(if (isBk) Color(0xFFF1F3F6) else BrandTheme.paper, shape)
+            .border(1.dp, if (isBk) Color(0xFFE2E6EC) else Color.Black.copy(alpha = 0.09f), shape)
             .clip(shape)
     ) {
         val bitmap = imageBitmap
@@ -1151,23 +1174,31 @@ private fun saveImageToGallery(context: Context, bytes: ByteArray): Boolean {
 private fun PreviewColumn(viewModel: ComposerViewModel, state: ComposerUiState) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val appearance = LocalAppAppearance.current
     val post = state.generatedPost
     val candidates = viewModel.comparisonCandidates()
     // 프로필이 바뀌면 조건 만료 배지가 즉시 갱신되도록 구독한다.
     val profile by viewModel.profileStore.profile.collectAsStateWithLifecycle()
     val draftIsCurrent = state.generatedSignature ==
-        DraftSignature(state.idea.trim(), state.mood, state.length, profile)
+        DraftSignature(state.idea.trim(), profile.mood, profile.preferredLength, profile)
 
     Column(
         Modifier
             .widthIn(max = 540.dp)
             .fillMaxWidth()
-            .starCard()
+            .starCard(appearance)
             .testTag("composer.previewCard"),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("미리보기", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            IconWell(
+                icon = Icons.Outlined.Description,
+                appearance = appearance,
+                size = 24.dp,
+                iconSize = 14.dp
+            )
+            Spacer(Modifier.width(8.dp))
+            Text("미리보기", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = BrandTheme.labelPrimary(appearance))
             Spacer(Modifier.weight(1f))
             val source = state.activeCaptionSource
             if (source != null) {
@@ -1175,10 +1206,10 @@ private fun PreviewColumn(viewModel: ComposerViewModel, state: ComposerUiState) 
                     Icon(
                         sourceIcon(source),
                         contentDescription = null,
-                        tint = BrandTheme.labelSecondary,
+                        tint = BrandTheme.labelSecondary(appearance),
                         modifier = Modifier.size(14.dp)
                     )
-                    Text(source.title, fontSize = 12.sp, color = BrandTheme.labelSecondary)
+                    Text(source.title, fontSize = 12.sp, color = BrandTheme.labelSecondary(appearance))
                 }
             }
         }
@@ -1234,6 +1265,7 @@ private fun PreviewColumn(viewModel: ComposerViewModel, state: ComposerUiState) 
                             "${post.characterCount} / ${validation.format.requiredCharacterCount}자",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
+                            color = BrandTheme.labelPrimary(appearance),
                             modifier = Modifier.testTag("preview.characterCount")
                         )
                     }
@@ -1250,15 +1282,21 @@ private fun PreviewColumn(viewModel: ComposerViewModel, state: ComposerUiState) 
 
                 SelectionContainer {
                     val resultShape = RoundedCornerShape(14.dp)
+                    val resultBorder = if (appearance == AppAppearance.BK) {
+                        BorderStroke(1.dp, Color(0xFFE2E6EC))
+                    } else {
+                        BorderStroke(1.dp, Color.White)
+                    }
                     Text(
                         post.composedText,
                         fontSize = 17.sp,
                         lineHeight = 24.sp,
+                        color = BrandTheme.labelPrimary(appearance),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .shadow(12.dp, resultShape, ambientColor = BrandTheme.ink.copy(alpha = 0.08f), spotColor = BrandTheme.ink.copy(alpha = 0.08f))
-                            .background(BrandTheme.resultSurface, resultShape)
-                            .border(1.dp, Color.White, resultShape)
+                            .shadow(if (appearance == AppAppearance.BK) 4.dp else 12.dp, resultShape, ambientColor = BrandTheme.ink.copy(alpha = 0.08f), spotColor = BrandTheme.ink.copy(alpha = 0.08f))
+                            .background(if (appearance == AppAppearance.BK) BrandTheme.bkEnamelWhite else BrandTheme.resultSurface, resultShape)
+                            .border(resultBorder, resultShape)
                             .padding(14.dp)
                             .testTag("preview.text")
                     )
@@ -1278,6 +1316,7 @@ private fun PreviewColumn(viewModel: ComposerViewModel, state: ComposerUiState) 
                         }
                     },
                     enabled = shareEnabled,
+                    appearance = appearance,
                     modifier = Modifier.testTag("preview.share")
                 ) {
                     if (state.isPreparingShare) {
@@ -1299,13 +1338,13 @@ private fun PreviewColumn(viewModel: ComposerViewModel, state: ComposerUiState) 
                     Icon(
                         if (state.shareMessageIsError) Icons.Filled.Warning else Icons.Outlined.Info,
                         contentDescription = null,
-                        tint = if (state.shareMessageIsError) BrandTheme.red else BrandTheme.labelSecondary,
+                        tint = if (state.shareMessageIsError) BrandTheme.red else BrandTheme.labelSecondary(appearance),
                         modifier = Modifier.size(14.dp)
                     )
                     Text(
                         state.shareMessage ?: "문구는 자동 복사됩니다",
                         fontSize = 12.sp,
-                        color = if (state.shareMessageIsError) BrandTheme.red else BrandTheme.labelSecondary,
+                        color = if (state.shareMessageIsError) BrandTheme.red else BrandTheme.labelSecondary(appearance),
                         modifier = Modifier.testTag("preview.shareMessage")
                     )
                 }
@@ -1318,16 +1357,17 @@ private fun PreviewColumn(viewModel: ComposerViewModel, state: ComposerUiState) 
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
-                    Icons.Outlined.Description,
-                    contentDescription = null,
-                    tint = BrandTheme.labelSecondary,
-                    modifier = Modifier.size(18.dp)
+                IconWell(
+                    icon = Icons.Outlined.Description,
+                    appearance = appearance,
+                    size = 24.dp,
+                    iconSize = 14.dp
                 )
+                Spacer(Modifier.width(4.dp))
                 Text(
                     "게시물을 만들면 여기에 표시됩니다",
                     fontSize = 15.sp,
-                    color = BrandTheme.labelSecondary,
+                    color = BrandTheme.labelSecondary(appearance),
                     modifier = Modifier.testTag("preview.empty")
                 )
             }
@@ -1349,8 +1389,19 @@ private fun CandidateComparison(
     state: ComposerUiState,
     candidates: List<CaptionCandidate>
 ) {
+    val appearance = LocalAppAppearance.current
+    val isBk = appearance == AppAppearance.BK
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("결과 비교", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconWell(
+                icon = Icons.Filled.AutoAwesome,
+                appearance = appearance,
+                size = 22.dp,
+                iconSize = 13.dp
+            )
+            Spacer(Modifier.width(6.dp))
+            Text("결과 비교", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = BrandTheme.labelPrimary(appearance))
+        }
 
         Row(
             Modifier.horizontalScroll(rememberScrollState()),
@@ -1360,15 +1411,22 @@ private fun CandidateComparison(
                 val report = viewModel.validationReport(candidate)
                 val selected = state.activeCaptionSource == candidate.source
                 val shape = RoundedCornerShape(14.dp)
+                val cardBg = if (isBk) {
+                    if (selected) Color.White else Color(0xFFF1F3F6)
+                } else {
+                    if (selected) BrandTheme.paper else BrandTheme.canvas
+                }
+                val cardBorder = if (selected) {
+                    BorderStroke(1.5.dp, BrandTheme.accent)
+                } else {
+                    BorderStroke(1.dp, if (isBk) Color(0xFFE2E6EC) else BrandTheme.labelSecondary.copy(alpha = 0.2f))
+                }
+
                 Column(
                     Modifier
                         .size(width = 220.dp, height = 112.dp)
-                        .background(if (selected) BrandTheme.paper else BrandTheme.canvas, shape)
-                        .border(
-                            if (selected) 1.5.dp else 1.dp,
-                            if (selected) BrandTheme.accent else BrandTheme.labelSecondary.copy(alpha = 0.2f),
-                            shape
-                        )
+                        .border(cardBorder, shape)
+                        .background(cardBg, shape)
                         .clickable { viewModel.useCandidate(candidate) }
                         .padding(12.dp)
                         .testTag("preview.candidate.${candidate.source.name}"),
@@ -1378,11 +1436,11 @@ private fun CandidateComparison(
                         Icon(
                             sourceIcon(candidate.source),
                             contentDescription = null,
-                            tint = BrandTheme.labelPrimary,
+                            tint = BrandTheme.labelPrimary(appearance),
                             modifier = Modifier.size(13.dp)
                         )
                         Spacer(Modifier.width(4.dp))
-                        Text(candidate.source.title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text(candidate.source.title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = BrandTheme.labelPrimary(appearance))
                         Spacer(Modifier.weight(1f))
                         Icon(
                             if (report.passesAllRules) Icons.Filled.Verified else Icons.Filled.Warning,
@@ -1394,7 +1452,7 @@ private fun CandidateComparison(
                     Text(
                         candidate.post.previewSnippet,
                         fontSize = 12.sp,
-                        color = BrandTheme.labelSecondary,
+                        color = BrandTheme.labelSecondary(appearance),
                         maxLines = 3,
                         lineHeight = 15.sp
                     )
@@ -1413,14 +1471,16 @@ private fun CandidateComparison(
 
 @Composable
 private fun MediaPreview(items: List<ComposerMedia>, aspect: Float, isLoading: Boolean) {
+    val appearance = LocalAppAppearance.current
+    val isBk = appearance == AppAppearance.BK
     val shape = RoundedCornerShape(18.dp)
     Box(
         Modifier
             .fillMaxWidth()
             .aspectRatio(aspect)
             .heightIn(max = 420.dp)
-            .background(BrandTheme.paper, shape)
-            .border(1.dp, Color(0x2E3C3C43), shape)
+            .background(if (isBk) Color(0xFFF1F3F6) else BrandTheme.paper, shape)
+            .border(1.dp, if (isBk) Color(0xFFE2E6EC) else Color(0x2E3C3C43), shape)
             .clip(shape)
             .testTag("preview.media"),
         contentAlignment = Alignment.Center
@@ -1431,7 +1491,7 @@ private fun MediaPreview(items: List<ComposerMedia>, aspect: Float, isLoading: B
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 CircularProgressIndicator(Modifier.size(24.dp), color = BrandTheme.accent, strokeWidth = 2.dp)
-                Text("미디어 불러오는 중", fontSize = 13.sp, color = BrandTheme.labelSecondary)
+                Text("미디어 불러오는 중", fontSize = 13.sp, color = BrandTheme.labelSecondary(appearance))
             }
             items.isNotEmpty() -> {
                 val pagerState = rememberPagerState(pageCount = { items.size })
@@ -1489,10 +1549,10 @@ private fun MediaPreview(items: List<ComposerMedia>, aspect: Float, isLoading: B
                 Icon(
                     Icons.Filled.PhotoLibrary,
                     contentDescription = null,
-                    tint = BrandTheme.labelSecondary,
+                    tint = BrandTheme.labelSecondary(appearance),
                     modifier = Modifier.size(34.dp)
                 )
-                Text("불러오는 중", fontSize = 12.sp, color = BrandTheme.labelSecondary)
+                Text("불러오는 중", fontSize = 12.sp, color = BrandTheme.labelSecondary(appearance))
             }
         }
     }

@@ -38,39 +38,49 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.armsone.starmanager.model.AppAppearance
 
 /**
- * iOS UISegmentedControl 근사치. Material 기본 SegmentedButton은 외형이 크게
- * 달라 커스텀으로 그린다.
+ * UISegmentedControl 대응.
+ * BK Style: 정밀 헤어라인 크롬 엣지와 에나멜 화이트 세그먼트.
+ * Classic: 오리지널 iOS 형태 유지.
  */
 @Composable
 fun StarSegmentedControl(
     options: List<String>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    appearance: AppAppearance = LocalAppAppearance.current
 ) {
+    val isBk = appearance == AppAppearance.BK
     val containerShape = RoundedCornerShape(9.dp)
     val segmentShape = RoundedCornerShape(7.dp)
+
+    val containerBackground = if (isBk) Color(0xFFE8EBF0) else Color(0x1F767680)
+    val containerBorder = if (isBk) BorderStroke(0.6.dp, BrandTheme.bkChromeHairline) else null
+
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(32.dp)
-            .background(Color(0x1F767680), containerShape)
+            .then(if (containerBorder != null) Modifier.border(containerBorder, containerShape) else Modifier)
+            .background(containerBackground, containerShape)
             .padding(2.dp)
     ) {
         options.forEachIndexed { index, option ->
             val selected = index == selectedIndex
+            val segmentModifier = if (selected) {
+                Modifier
+                    .shadow(if (isBk) 2.dp else 2.dp, segmentShape)
+                    .background(Color.White, segmentShape)
+                    .then(if (isBk) Modifier.border(BorderStroke(0.5.dp, Color(0xFFD6DAE0)), segmentShape) else Modifier)
+            } else Modifier
+
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .then(
-                        if (selected) {
-                            Modifier
-                                .shadow(2.dp, segmentShape)
-                                .background(Color.White, segmentShape)
-                        } else Modifier
-                    )
+                    .then(segmentModifier)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
@@ -82,7 +92,7 @@ fun StarSegmentedControl(
                     text = option,
                     fontSize = 13.sp,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = BrandTheme.labelPrimary,
+                    color = if (isBk) BrandTheme.bkLabelPrimary else BrandTheme.labelPrimary,
                     textAlign = TextAlign.Center,
                     maxLines = 1
                 )
@@ -91,7 +101,7 @@ fun StarSegmentedControl(
     }
 }
 
-/** iOS UISlider 근사치 — 흰색 원형 썸, 좁은 트랙, 액센트 채움. */
+/** UISlider 대응 — 에나멜 화이트 원형 썸, 좁은 트랙. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StarSlider(
@@ -100,42 +110,68 @@ fun StarSlider(
     valueRange: ClosedFloatingPointRange<Float>,
     step: Float,
     modifier: Modifier = Modifier,
-    tint: Color = BrandTheme.accent
+    tint: Color = BrandTheme.accent,
+    appearance: AppAppearance = LocalAppAppearance.current
 ) {
+    val isBk = appearance == AppAppearance.BK
     val stepsCount = (((valueRange.endInclusive - valueRange.start) / step).toInt() - 1)
         .coerceAtLeast(0)
+    val inactiveColor = if (isBk) Color(0xFFD9DDE4) else Color(0x2E787880)
+    val sliderColors = SliderDefaults.colors(
+        thumbColor = Color.White,
+        activeTrackColor = tint,
+        inactiveTrackColor = inactiveColor,
+        activeTickColor = Color.Transparent,
+        inactiveTickColor = Color.Transparent
+    )
+
     Slider(
         value = value,
         onValueChange = onValueChange,
         valueRange = valueRange,
         steps = stepsCount,
         modifier = modifier.height(28.dp),
-        colors = SliderDefaults.colors(
-            thumbColor = Color.White,
-            activeTrackColor = tint,
-            inactiveTrackColor = Color(0x2E787880),
-            activeTickColor = Color.Transparent,
-            inactiveTickColor = Color.Transparent
-        ),
+        colors = sliderColors,
         thumb = {
-            Box(
+            val thumbModifier = if (isBk) {
+                Modifier
+                    .size(26.dp)
+                    .shadow(3.dp, CircleShape)
+                    .border(BorderStroke(0.8.dp, BrandTheme.bkChromeHairline), CircleShape)
+                    .background(Color.White, CircleShape)
+            } else {
                 Modifier
                     .size(26.dp)
                     .shadow(3.dp, CircleShape)
                     .background(Color.White, CircleShape)
+            }
+            Box(thumbModifier)
+        },
+        track = { sliderState ->
+            SliderDefaults.Track(
+                sliderState = sliderState,
+                colors = sliderColors,
+                drawStopIndicator = null
             )
         }
     )
 }
 
-/** iOS 토글 스위치 근사치 — 켜짐 색은 전역 tint(accent)를 따른다. */
+/** 토글 스위치 대응. */
 @Composable
 fun StarSwitch(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    appearance: AppAppearance = LocalAppAppearance.current
 ) {
-    val trackColor = if (checked) BrandTheme.accent else Color(0x2E787880)
+    val isBk = appearance == AppAppearance.BK
+    val trackColor = if (checked) {
+        BrandTheme.accent
+    } else {
+        if (isBk) Color(0xFFD0D5DD) else Color(0x2E787880)
+    }
+
     Box(
         modifier = modifier
             .width(51.dp)
@@ -148,18 +184,25 @@ fun StarSwitch(
             .padding(2.dp),
         contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart
     ) {
-        Box(
+        val thumbModifier = if (isBk) {
+            Modifier
+                .size(27.dp)
+                .shadow(2.dp, CircleShape)
+                .border(BorderStroke(0.6.dp, BrandTheme.bkChromeHairline), CircleShape)
+                .background(Color.White, CircleShape)
+        } else {
             Modifier
                 .size(27.dp)
                 .shadow(2.dp, CircleShape)
                 .background(Color.White, CircleShape)
-        )
+        }
+        Box(thumbModifier)
     }
 }
 
 /**
- * iOS GlossyPrimaryButtonStyle 근사치 — 광택 차콜 배경의 단일 지배적 액션 버튼.
- * 화면당 한 곳에만 써서 "하나의 강조 액션" 규칙을 지킨다.
+ * GlossyPrimaryButton — 클래식의 원래 광택 차콜을 보존하고 BK는 더 짙은 카본으로 표현한다.
+ * 화면당 하나의 강조 액션 규칙을 엄격하게 준수한다.
  */
 @Composable
 fun GlossyPrimaryButton(
@@ -167,18 +210,29 @@ fun GlossyPrimaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     contentPadding: PaddingValues = PaddingValues(horizontal = 18.dp),
+    appearance: AppAppearance = LocalAppAppearance.current,
     content: @Composable RowScope.() -> Unit
 ) {
+    val isBk = appearance == AppAppearance.BK
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.985f else 1f, label = "glossyPrimaryScale")
     val shape = RoundedCornerShape(16.dp)
-    val shadowAlpha = if (pressed) 0.18f else 0.34f
-    Row(
-        modifier = modifier
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .fillMaxWidth()
-            .heightIn(min = 54.dp)
+
+    val buttonModifier = if (isBk) {
+        val shadowAlpha = if (pressed) 0.18f else 0.34f
+        Modifier
+            .shadow(
+                elevation = if (pressed) 4.dp else 10.dp,
+                shape = shape,
+                ambientColor = BrandTheme.ink.copy(alpha = shadowAlpha),
+                spotColor = BrandTheme.ink.copy(alpha = shadowAlpha)
+            )
+            .background(BrandTheme.bkGlossyCarbon, shape)
+            .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.28f)), shape)
+    } else {
+        val shadowAlpha = if (pressed) 0.18f else 0.34f
+        Modifier
             .shadow(
                 elevation = if (pressed) 4.dp else 10.dp,
                 shape = shape,
@@ -187,6 +241,14 @@ fun GlossyPrimaryButton(
             )
             .background(BrandTheme.glossyBlack, shape)
             .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.24f)), shape)
+    }
+
+    Row(
+        modifier = modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .fillMaxWidth()
+            .heightIn(min = 54.dp)
+            .then(buttonModifier)
             .clickable(
                 enabled = enabled,
                 interactionSource = interactionSource,

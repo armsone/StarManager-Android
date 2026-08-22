@@ -13,7 +13,9 @@ data class CreatorProfile(
     val hashtagStyle: String = "핵심 키워드 중심",
     val writingGuidelines: String = DEFAULT_WRITING_GUIDELINES,
     val generationControls: GenerationControls? = null,
-    val additionalInstructions: String? = null
+    val additionalInstructions: String? = null,
+    val mood: PostMood = PostMood.WITTY,
+    val selectedGenerationStyle: GenerationStylePreset? = GenerationStylePreset.GENERATION_386
 ) {
     val controls: GenerationControls
         get() = generationControls ?: GenerationControls()
@@ -118,25 +120,29 @@ enum class GenerationStylePreset(val rawValue: String) {
                 voice = "짧고 빠른 호흡으로, 눈치 빠른 한마디와 신선한 비유를 섞어 재치 있게",
                 usesEmoji = true,
                 additionalInstructions = "억지 유행어는 피하고 설명보다 장면, 장면보다 한 방 있는 말맛을 먼저 보여주기",
-                generationControls = GenerationControls(characterCount, 15, 15, 45, 5, 20)
+                generationControls = GenerationControls(characterCount, 15, 15, 45, 5, 20),
+                selectedGenerationStyle = MZ
             )
             GEN_X -> profile.copy(
                 voice = "속은 뜨겁지만 겉은 쿨하게, 낭만과 현실을 한 문장 안에서 교차시키며",
                 usesEmoji = false,
                 additionalInstructions = "과한 신파 없이 장면은 선명하게, 결론은 무심한 듯 멋있게 남기기",
-                generationControls = GenerationControls(characterCount, 25, 15, 25, 15, 20)
+                generationControls = GenerationControls(characterCount, 25, 15, 25, 15, 20),
+                selectedGenerationStyle = GEN_X
             )
             GENERATION_386 -> profile.copy(
                 voice = "살아본 사람의 현실감은 살리되 정답을 강요하지 않고 유쾌하게",
                 usesEmoji = false,
                 additionalInstructions = "성공담보다 시행착오를 앞세우고, 잔소리가 될 순간에는 자조적인 유머로 방향 틀기",
-                generationControls = GenerationControls(characterCount, 20, 25, 15, 25, 15)
+                generationControls = GenerationControls(characterCount, 20, 25, 15, 25, 15),
+                selectedGenerationStyle = GENERATION_386
             )
             BABY_BOOM -> profile.copy(
                 voice = "라떼 한 잔 같은 연륜을 깔고, 스스로도 웃을 줄 아는 능청스러운 꼰대 말투로",
                 usesEmoji = false,
                 additionalInstructions = "한 번쯤 훈계할 듯 운을 떼되 결론에서는 자기 흑역사를 꺼내 웃음과 쓸 만한 지혜를 함께 남기기",
-                generationControls = GenerationControls(characterCount, 30, 35, 10, 15, 10)
+                generationControls = GenerationControls(characterCount, 30, 35, 10, 15, 10),
+                selectedGenerationStyle = BABY_BOOM
             )
         }
     }
@@ -154,7 +160,9 @@ data class WritingPreset(
     val preferredLength: PostLength? = null,
     val usesEmoji: Boolean? = null,
     val prohibitedPhrases: String? = null,
-    val hashtagStyle: String? = null
+    val hashtagStyle: String? = null,
+    val mood: PostMood? = null,
+    val selectedGenerationStyle: GenerationStylePreset? = null
 ) {
     companion object {
         val defaults: List<WritingPreset> = listOf(
