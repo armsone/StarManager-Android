@@ -61,6 +61,7 @@ import com.armsone.starmanager.design.LocalAppAppearance
 import com.armsone.starmanager.model.AppAppearance
 import com.armsone.starmanager.model.CreatorProfileStore
 import com.armsone.starmanager.model.SharedPreferencesKeyValueStore
+import com.armsone.starmanager.update.DirectUpdateManager
 import com.armsone.starmanager.ui.composer.ComposerScreen
 import com.armsone.starmanager.ui.composer.ComposerViewModel
 import com.armsone.starmanager.ui.settings.ProfileSettingsScreen
@@ -90,6 +91,7 @@ class MainActivity : ComponentActivity() {
             FixtureHooks.resetStateRequested = false
         }
         val profileStore = CreatorProfileStore(storage)
+        DirectUpdateManager.get(applicationContext).start()
 
         setContent {
             val appearance by profileStore.appearance.collectAsStateWithLifecycle()

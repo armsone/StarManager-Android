@@ -1,6 +1,7 @@
 Route/state ID,Element/anatomy,Dimension/action,Fixture/profile,iOS exact reference,Android observed,Difference,Required action,Evidence/confidence,Status/exception proof
 composer_empty_default,page,reachable route,catalog-v1/all,스튜디오 tab,ComposerScreen,none,paired capture,source/high,implemented from source; visual parity unverified
 settings_default,page,reachable route,catalog-v1/all,내 스타일 tab,ProfileSettingsScreen,none,paired capture,source/high,implemented from source; visual parity unverified
+settings_updates,update channel,automatic and manual update actions,direct-release/TestFlight,TestFlight managed intentional exception,GitHub APK check/download/verify/install,platform distribution differs,build and seven-state runtime verification,source/high,implemented_source_only
 composer_empty_default,page,background color,catalog-v1/all,BK Enamel / Classic Canvas,BrandTheme.canvasBrush,none,paired capture,source/high,implemented from source; visual parity unverified
 composer_empty_default,card,padding/radius/border,catalog-v1/all,18/20/1 dp,18/20/1 dp,none,paired capture,source/high,implemented from source; visual parity unverified
 composer_empty_default,layout,phone/tablet breakpoint,catalog-v1/all,"compact 1-column; regular 2-column",600dp 1/2-column,platform width-class mapping,paired capture,source/high,implemented from source; visual parity unverified

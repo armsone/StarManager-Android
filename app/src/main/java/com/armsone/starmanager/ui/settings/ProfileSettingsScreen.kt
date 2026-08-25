@@ -53,6 +53,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -75,6 +76,8 @@ import com.armsone.starmanager.model.GenerationStylePreset
 import com.armsone.starmanager.model.PostLength
 import com.armsone.starmanager.model.PostMood
 import com.armsone.starmanager.model.WritingPreset
+import com.armsone.starmanager.update.DirectUpdateManager
+import com.armsone.starmanager.update.DirectUpdateSettings
 
 /**
  * "나의 취향" 설정 화면.
@@ -84,6 +87,8 @@ import com.armsone.starmanager.model.WritingPreset
  */
 @Composable
 fun ProfileSettingsScreen(store: CreatorProfileStore) {
+    val context = LocalContext.current
+    val updateManager = remember(context) { DirectUpdateManager.get(context) }
     val appearance by store.appearance.collectAsStateWithLifecycle()
     val profile by store.profile.collectAsStateWithLifecycle()
     val presets by store.presets.collectAsStateWithLifecycle()
@@ -129,6 +134,15 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                             .padding(vertical = 6.dp)
                             .testTag("settings.appearance")
                     )
+                }
+
+                SettingsSection(
+                    header = "앱 업데이트",
+                    icon = Icons.Outlined.ArrowCircleDown,
+                    appearance = appearance,
+                    variant = IconWellVariant.CARBON
+                ) {
+                    DirectUpdateSettings(updateManager)
                 }
 
                 // 스타일 (생성 프리셋)
