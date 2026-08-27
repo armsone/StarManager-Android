@@ -1,6 +1,5 @@
 package com.armsone.starmanager.ui.settings
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,19 +27,15 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.EmojiPeople
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.outlined.Accessibility
 import androidx.compose.material.icons.outlined.ArrowCircleDown
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Diamond
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,15 +47,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.armsone.starmanager.design.BrandTheme
 import com.armsone.starmanager.design.IconWell
@@ -71,19 +65,27 @@ import com.armsone.starmanager.design.StarSlider
 import com.armsone.starmanager.design.StarSwitch
 import com.armsone.starmanager.model.AppAppearance
 import com.armsone.starmanager.model.CreatorProfileStore
-import com.armsone.starmanager.model.GenerationControls
 import com.armsone.starmanager.model.GenerationStylePreset
 import com.armsone.starmanager.model.PostLength
 import com.armsone.starmanager.model.PostMood
 import com.armsone.starmanager.model.WritingPreset
+import com.armsone.starmanager.service.DirectAIProvider
+import com.armsone.starmanager.ui.externalai.ExternalAISurface
+import com.armsone.starmanager.ui.externalai.ExternalAISurfaceMode
 import com.armsone.starmanager.update.DirectUpdateManager
 import com.armsone.starmanager.update.DirectUpdateSettings
 
 /**
- * "나의 취향" 설정 화면.
- * 테마(BK / 클래식), 스타일 프리셋과 모든 생성 취향, 추가 옵션, 프리셋 관리,
- * 작성 원칙을 하나의 통합 편집 표면으로 제공한다.
- * 콘텐츠 최대 폭 760dp.
+ * "설정" 화면.
+ * iOS StarManager 기준 순서:
+ * 1. 내 프리셋
+ * 2. 기본 설정 (말투, 이모지 사용)
+ * 3. 글쓰기 취향 (MZ/X/386/꼰대, 분위기, 이야기 비중, 글자 수)
+ * 4. 추가 옵션 (한 줄 추가 요청 1..3줄, 금지 표현, 해시태그)
+ * 5. 프리셋 보관
+ * 6. 외부 AI 로그인 관리 (Gemini, ChatGPT, Claude)
+ * 7. 앱 업데이트
+ * 8. 테마 관리 (BK / 클래식)
  */
 @Composable
 fun ProfileSettingsScreen(store: CreatorProfileStore) {
@@ -94,8 +96,7 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
     val presets by store.presets.collectAsStateWithLifecycle()
 
     var presetName by rememberSaveable { mutableStateOf("") }
-    var showsAdvancedPrompt by rememberSaveable { mutableStateOf(false) }
-    var showsRestoreConfirmation by remember { mutableStateOf(false) }
+    var activeLoginProvider by remember { mutableStateOf<DirectAIProvider?>(null) }
 
     Box(
         Modifier
@@ -116,39 +117,71 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                     .widthIn(max = 760.dp),
                 verticalArrangement = Arrangement.spacedBy(22.dp)
             ) {
-                // 테마 (BK / 클래식 외형 전환)
+                // 1. 내 프리셋
                 SettingsSection(
-                    header = "테마",
-                    icon = Icons.Outlined.Diamond,
+                    header = "내 프리셋",
+                    icon = Icons.Filled.CheckCircle,
                     appearance = appearance,
                     variant = IconWellVariant.CARBON
                 ) {
-                    StarSegmentedControl(
-                        options = listOf(AppAppearance.BK.title, AppAppearance.CLASSIC.title),
-                        selectedIndex = if (appearance == AppAppearance.BK) 0 else 1,
-                        appearance = appearance,
-                        onSelect = { index ->
-                            store.setAppearance(if (index == 0) AppAppearance.BK else AppAppearance.CLASSIC)
-                        },
-                        modifier = Modifier
-                            .padding(vertical = 6.dp)
-                            .testTag("settings.appearance")
-                    )
+                    if (presets.isEmpty()) {
+                        Text(
+                            "보관된 프리셋이 없어요.",
+                            fontSize = 15.sp,
+                            color = BrandTheme.labelSecondary(appearance),
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                    } else {
+                        presets.forEachIndexed { index, preset ->
+                            if (index > 0) {
+                                HorizontalDivider(color = BrandTheme.divider(appearance))
+                            }
+                            PresetRow(
+                                preset = preset,
+                                appearance = appearance,
+                                onApply = { store.apply(preset) },
+                                onDelete = { store.deletePreset(index) },
+                                modifier = Modifier.testTag("settings.preset.$index")
+                            )
+                        }
+                    }
                 }
 
+                // 2. 기본 설정 (말투, 이모지 사용)
                 SettingsSection(
-                    header = "앱 업데이트",
-                    icon = Icons.Outlined.ArrowCircleDown,
+                    header = "기본 설정",
+                    icon = Icons.Filled.Tune,
                     appearance = appearance,
-                    variant = IconWellVariant.CARBON
+                    variant = IconWellVariant.OXBLOOD
                 ) {
-                    DirectUpdateSettings(updateManager)
+                    LabeledFieldRow("말투", profile.voice, appearance, testTag = "settings.voice") {
+                        store.updateProfile { p -> p.copy(voice = it) }
+                    }
+                    HorizontalDivider(color = BrandTheme.divider(appearance))
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("이모지 사용", fontSize = 17.sp, color = BrandTheme.labelPrimary(appearance))
+                        Spacer(Modifier.weight(1f))
+                        StarSwitch(
+                            checked = profile.usesEmoji,
+                            appearance = appearance,
+                            onCheckedChange = { checked ->
+                                store.updateProfile { p -> p.copy(usesEmoji = checked) }
+                            },
+                            modifier = Modifier.testTag("settings.usesEmoji")
+                        )
+                    }
                 }
 
-                // 스타일 (생성 프리셋)
+                // 3. 글쓰기 취향
                 SettingsSection(
-                    header = "글쓰기 스타일",
+                    header = "글쓰기 취향",
                     icon = Icons.Filled.AutoAwesome,
+                    footer = "프리셋·분위기·이야기 비중·글자 수만 간단히 요청에 반영됩니다.",
                     appearance = appearance,
                     variant = IconWellVariant.CARBON
                 ) {
@@ -173,26 +206,6 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                             }
                             repeat(columns - rowPresets.size) { Spacer(Modifier.weight(1f)) }
                         }
-                    }
-                }
-
-                // 프로필과 생성 취향을 한 화면에서 함께 편집한다.
-                SettingsSection(
-                    header = "나의 취향",
-                    icon = Icons.Filled.Tune,
-                    appearance = appearance,
-                    variant = IconWellVariant.OXBLOOD
-                ) {
-                    LabeledFieldRow("주제", profile.accountTopic, appearance, testTag = "settings.topic") {
-                        store.updateProfile { p -> p.copy(accountTopic = it) }
-                    }
-                    HorizontalDivider(color = BrandTheme.divider(appearance))
-                    LabeledFieldRow("독자", profile.audience, appearance, testTag = "settings.audience") {
-                        store.updateProfile { p -> p.copy(audience = it) }
-                    }
-                    HorizontalDivider(color = BrandTheme.divider(appearance))
-                    LabeledFieldRow("말투", profile.voice, appearance, testTag = "settings.voice") {
-                        store.updateProfile { p -> p.copy(voice = it) }
                     }
                     HorizontalDivider(color = BrandTheme.divider(appearance))
                     Row(
@@ -246,53 +259,9 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                             p.withControls(p.controls.copy(characterCount = newValue))
                         }
                     }
-                    HorizontalDivider(color = BrandTheme.divider(appearance))
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("이모지 사용", fontSize = 17.sp, color = BrandTheme.labelPrimary(appearance))
-                        Spacer(Modifier.weight(1f))
-                        StarSwitch(
-                            checked = profile.usesEmoji,
-                            appearance = appearance,
-                            onCheckedChange = { checked ->
-                                store.updateProfile { p -> p.copy(usesEmoji = checked) }
-                            },
-                            modifier = Modifier.testTag("settings.usesEmoji")
-                        )
-                    }
-                    HorizontalDivider(color = BrandTheme.divider(appearance))
-                    ToneSliderRow(store, "감동", profile.controls.emotion, appearance, "settings.slider.emotion") { c, v -> c.copy(emotion = v) }
-                    ToneSliderRow(store, "친절함", profile.controls.kindness, appearance, "settings.slider.kindness") { c, v -> c.copy(kindness = v) }
-                    ToneSliderRow(store, "참신함", profile.controls.originality, appearance, "settings.slider.originality") { c, v -> c.copy(originality = v) }
-                    ToneSliderRow(store, "단단함", profile.controls.masculinity, appearance, "settings.slider.masculinity") { c, v -> c.copy(masculinity = v) }
-                    ToneSliderRow(store, "시크함", profile.controls.chic, appearance, "settings.slider.chic") { c, v -> c.copy(chic = v) }
-
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("느낌 합계", fontSize = 13.sp, color = BrandTheme.labelPrimary(appearance))
-                        Spacer(Modifier.weight(1f))
-                        Text(
-                            "${profile.controls.toneTotal}%",
-                            fontSize = 13.sp,
-                            color = if (profile.controls.toneTotal == 100) {
-                                BrandTheme.labelSecondary(appearance)
-                            } else {
-                                BrandTheme.orange
-                            },
-                            modifier = Modifier.testTag("settings.toneTotal")
-                        )
-                    }
                 }
 
-                // 추가 옵션
+                // 4. 추가 옵션
                 SettingsSection(
                     header = "추가 옵션",
                     icon = Icons.Outlined.Description,
@@ -300,10 +269,10 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                     variant = IconWellVariant.CARBON
                 ) {
                     MultilineFieldRow(
-                        placeholder = "추가 지침",
+                        placeholder = "한 줄 추가 요청",
                         value = profile.additionalInstructions ?: "",
-                        minLines = 3,
-                        maxLines = 8,
+                        minLines = 1,
+                        maxLines = 3,
                         appearance = appearance,
                         testTag = "settings.additionalInstructions"
                     ) {
@@ -333,7 +302,7 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                     }
                 }
 
-                // 프리셋 보관
+                // 5. 프리셋 보관
                 SettingsSection(
                     header = "프리셋 보관",
                     icon = Icons.Filled.CheckCircle,
@@ -377,64 +346,92 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                     }
                 }
 
-                // 작성 원칙
+                // 6. 외부 AI 로그인 관리 (Gemini, ChatGPT, Claude)
                 SettingsSection(
-                    header = "작성 원칙",
-                    icon = Icons.Outlined.Info,
+                    header = "외부 AI 로그인 관리",
+                    icon = Icons.Filled.AccountCircle,
+                    footer = "처음 열면 각 서비스의 공식 로그인 페이지가 떠요. 한 번 로그인하면 이 기기에서는 서비스가 로그아웃시키기 전까지 기억돼요. 스타매니저는 비밀번호를 보거나 저장하지 않아요.",
                     appearance = appearance,
                     variant = IconWellVariant.CARBON
                 ) {
-                    DisclosureHeader(
-                        title = "직접 편집",
-                        expanded = showsAdvancedPrompt,
-                        appearance = appearance,
-                        variant = IconWellVariant.CARBON,
-                        onToggle = { showsAdvancedPrompt = !showsAdvancedPrompt },
-                        testTag = "settings.guidelinesDisclosure"
-                    )
-                    AnimatedVisibility(visible = showsAdvancedPrompt) {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            val guidelinesBg = if (appearance == AppAppearance.BK) Color(0xFFF1F3F6) else Color(0xFFF7F7F9)
-                            BasicTextField(
-                                value = profile.writingGuidelines,
-                                onValueChange = { value ->
-                                    store.updateProfile { p -> p.copy(writingGuidelines = value) }
-                                },
-                                textStyle = TextStyle(fontSize = 16.sp, color = BrandTheme.labelPrimary(appearance), lineHeight = 22.sp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 360.dp)
-                                    .background(guidelinesBg, RoundedCornerShape(10.dp))
-                                    .padding(10.dp)
-                                    .testTag("settings.guidelines")
+                    val providers = listOf(DirectAIProvider.GEMINI, DirectAIProvider.OPEN_AI, DirectAIProvider.CLAUDE)
+                    providers.forEachIndexed { index, provider ->
+                        if (index > 0) {
+                            HorizontalDivider(color = BrandTheme.divider(appearance))
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { activeLoginProvider = provider }
+                                .padding(vertical = 12.dp)
+                                .testTag("settings.loginRow.${provider.rawValue}"),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                provider.title,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = BrandTheme.labelPrimary(appearance),
+                                modifier = Modifier.weight(1f)
                             )
                             Text(
-                                "기본값으로 되돌리기",
-                                fontSize = 17.sp,
-                                color = BrandTheme.red,
-                                modifier = Modifier
-                                    .clickable { showsRestoreConfirmation = true }
-                                    .padding(vertical = 8.dp)
-                                    .testTag("settings.restoreDefaults")
+                                "로그인 열기",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = BrandTheme.accent,
+                                modifier = Modifier.testTag("settings.login.${provider.rawValue}")
                             )
                         }
                     }
+                }
+
+                // 7. 앱 업데이트
+                SettingsSection(
+                    header = "앱 업데이트",
+                    icon = Icons.Outlined.ArrowCircleDown,
+                    appearance = appearance,
+                    variant = IconWellVariant.CARBON
+                ) {
+                    DirectUpdateSettings(updateManager)
+                }
+
+                // 8. 테마 관리 (BK / 클래식 외형 전환)
+                SettingsSection(
+                    header = "테마 관리",
+                    icon = Icons.Outlined.Diamond,
+                    footer = "클래식을 고르면 예전 모습으로 볼 수 있어요.",
+                    appearance = appearance,
+                    variant = IconWellVariant.CARBON
+                ) {
+                    StarSegmentedControl(
+                        options = listOf(AppAppearance.BK.title, AppAppearance.CLASSIC.title),
+                        selectedIndex = if (appearance == AppAppearance.BK) 0 else 1,
+                        appearance = appearance,
+                        onSelect = { index ->
+                            store.setAppearance(if (index == 0) AppAppearance.BK else AppAppearance.CLASSIC)
+                        },
+                        modifier = Modifier
+                            .padding(vertical = 6.dp)
+                            .testTag("settings.appearance")
+                    )
                 }
             }
         }
     }
 
-    if (showsRestoreConfirmation) {
-        RestoreConfirmationDialog(
-            appearance = appearance,
-            onConfirm = {
-                store.restoreDefaultWritingGuidelines()
-                showsRestoreConfirmation = false
-            },
-            onDismiss = { showsRestoreConfirmation = false }
+    val loginProvider = activeLoginProvider
+    if (loginProvider != null) {
+        ExternalAISurface(
+            provider = loginProvider,
+            mode = ExternalAISurfaceMode.LOGIN,
+            prompt = "",
+            onClose = { activeLoginProvider = null },
+            appearance = appearance
         )
     }
 }
+
 @Composable
 private fun StyleButton(
     preset: GenerationStylePreset,
@@ -495,6 +492,7 @@ private fun presetIcon(preset: GenerationStylePreset): ImageVector = when (prese
 private fun SettingsSection(
     header: String? = null,
     icon: ImageVector? = null,
+    footer: String? = null,
     appearance: AppAppearance = LocalAppAppearance.current,
     variant: IconWellVariant = IconWellVariant.CARBON,
     content: @Composable () -> Unit
@@ -539,8 +537,19 @@ private fun SettingsSection(
         ) {
             content()
         }
+
+        if (footer != null) {
+            Text(
+                footer,
+                fontSize = 13.sp,
+                color = BrandTheme.labelSecondary(appearance),
+                lineHeight = 18.sp,
+                modifier = Modifier.padding(start = 4.dp, top = 6.dp, end = 4.dp)
+            )
+        }
     }
 }
+
 @Composable
 private fun PresetRow(
     preset: WritingPreset,
@@ -567,7 +576,6 @@ private fun PresetRow(
             modifier = Modifier.size(22.dp)
         )
         Spacer(Modifier.width(14.dp))
-        // iOS는 스와이프 삭제 — 명시적 삭제 버튼으로 대체한다.
         Icon(
             Icons.Filled.Delete,
             contentDescription = "삭제",
@@ -674,111 +682,5 @@ private fun ControlSliderRow(
             appearance = appearance,
             modifier = Modifier.testTag(testTag)
         )
-    }
-}
-
-@Composable
-private fun ToneSliderRow(
-    store: CreatorProfileStore,
-    title: String,
-    value: Int,
-    appearance: AppAppearance,
-    testTag: String,
-    apply: (GenerationControls, Int) -> GenerationControls
-) {
-    ControlSliderRow(title = title, value = value, appearance = appearance, testTag = testTag) { newValue ->
-        store.updateProfile { p -> p.withControls(apply(p.controls, newValue)) }
-    }
-}
-
-@Composable
-private fun DisclosureHeader(
-    title: String,
-    expanded: Boolean,
-    onToggle: () -> Unit,
-    testTag: String,
-    icon: ImageVector? = null,
-    appearance: AppAppearance = LocalAppAppearance.current,
-    variant: IconWellVariant = IconWellVariant.CARBON
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onToggle)
-            .padding(vertical = 12.dp)
-            .testTag(testTag),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        if (icon != null) {
-            IconWell(
-                icon = icon,
-                appearance = appearance,
-                variant = variant,
-                size = 22.dp,
-                iconSize = if (appearance == AppAppearance.BK) 13.dp else 16.dp
-            )
-        }
-        Text(title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = BrandTheme.labelPrimary(appearance))
-        Spacer(Modifier.weight(1f))
-        Icon(
-            if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-            contentDescription = null,
-            tint = BrandTheme.accent
-        )
-    }
-}
-
-/** iOS confirmationDialog 대응. */
-@Composable
-private fun RestoreConfirmationDialog(
-    appearance: AppAppearance = LocalAppAppearance.current,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val shape = RoundedCornerShape(14.dp)
-    Dialog(onDismissRequest = onDismiss) {
-        Column(
-            Modifier
-                .background(BrandTheme.settingsSectionBackground(appearance), shape)
-                .padding(top = 20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                "기본 작성 지침으로 되돌릴까요?",
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = BrandTheme.labelPrimary(appearance),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 20.dp)
-            )
-            Spacer(Modifier.padding(4.dp))
-            Text(
-                "직접 수정한 내용은 사라집니다.",
-                fontSize = 13.sp,
-                color = BrandTheme.labelSecondary(appearance),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 20.dp)
-            )
-            Spacer(Modifier.padding(8.dp))
-            HorizontalDivider(color = BrandTheme.divider(appearance))
-            TextButton(
-                onClick = onConfirm,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("settings.restoreConfirm")
-            ) {
-                Text("되돌리기", fontSize = 17.sp, color = BrandTheme.red)
-            }
-            HorizontalDivider(color = BrandTheme.divider(appearance))
-            TextButton(
-                onClick = onDismiss,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("settings.restoreCancel")
-            ) {
-                Text("취소", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = BrandTheme.accent)
-            }
-        }
     }
 }

@@ -21,8 +21,8 @@ interface CaptionGenerating {
 
 /**
  * iOS DeviceIntelligenceAvailability 대응.
- * Android에는 Apple FoundationModels가 없으므로 iOS의 미지원 기기와 동일하게
- * 항상 UNSUPPORTED_DEVICE("기본 생성")로 동작한다.
+ * Android에는 Apple FoundationModels가 없으므로 로컬 결정적 생성기로 동작하며
+ * UI에는 "기기 AI"로 표기한다.
  */
 enum class DeviceIntelligenceAvailability {
     AVAILABLE,
@@ -31,16 +31,13 @@ enum class DeviceIntelligenceAvailability {
     MODEL_DOWNLOADING;
 
     val title: String
-        get() = when (this) {
-            AVAILABLE -> "아이폰 AI"
-            else -> "기본 생성"
-        }
+        get() = "기기 AI"
 
     val detail: String
         get() = when (this) {
             AVAILABLE -> "로그인 없이 기기에서 작성"
             UNSUPPORTED_DEVICE -> "이 기기에서도 바로 작성"
-            NEEDS_APPLE_INTELLIGENCE -> "Apple Intelligence를 켜면 기기 AI 사용"
+            NEEDS_APPLE_INTELLIGENCE -> "기기 AI 사용"
             MODEL_DOWNLOADING -> "기기 AI 준비가 끝날 때까지 기본 생성"
         }
 
@@ -49,27 +46,22 @@ enum class DeviceIntelligenceAvailability {
     }
 }
 
-/** 외부 AI 제공사 — 프롬프트 공유/붙여넣기 흐름에서 사용. */
-enum class DirectAIProvider(val rawValue: String) {
-    OPEN_AI("openAI"),
-    GEMINI("gemini"),
-    GROK("grok");
+/** 외부 AI 제공사 — 프롬프트 웹 생성 및 로그인 관리에서 사용. */
+enum class DirectAIProvider(val rawValue: String, val title: String, val url: String) {
+    GEMINI("gemini", "Gemini", "https://gemini.google.com/app"),
+    OPEN_AI("openAI", "ChatGPT", "https://chatgpt.com/"),
+    CLAUDE("claude", "Claude", "https://claude.ai/new"),
+    GROK("grok", "Grok", "https://grok.com/"); // 마이그레이션 호환용 (사용자 노출 불가)
 
-    val title: String
-        get() = when (this) {
-            OPEN_AI -> "ChatGPT"
-            GEMINI -> "Gemini"
-            GROK -> "Grok"
-        }
+    companion object {
+        val visibleProviders: List<DirectAIProvider> = listOf(GEMINI, OPEN_AI, CLAUDE)
+    }
 }
 
 /** iOS ComposerView의 외부 프롬프트 조립을 공용화한 것. */
 object ExternalPromptBuilder {
     fun build(profile: CreatorProfile, idea: String, mood: PostMood, length: PostLength): String =
-        profile.prompt(idea) + "\n" +
-            "- 선택한 분위기: ${mood.rawValue}\n" +
-            "- 이야기 비중: ${length.storyWeightTitle} — ${length.promptInstruction}\n" +
-            "- 공백과 줄바꿈을 포함해 정확히 ${profile.controls.characterCount}자로 작성"
+        profile.generationPrompt(idea, mood, length)
 
     fun validationContext(profile: CreatorProfile): CaptionValidationContext =
         CaptionValidationContext(

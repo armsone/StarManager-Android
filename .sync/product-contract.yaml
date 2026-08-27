@@ -1,0 +1,476 @@
+contract_version: 1
+product_id: "starmanager"
+
+reference_inventory:
+  member: "ios"
+  revision: "2.0.1"
+  scanned_roots:
+    - "StarManager"
+  uncovered_source_refs: []
+
+capabilities:
+  - id: "direct_updates"
+    purpose: "In-app self-update management for direct APK distribution on Android, providing update checks, background downloading, cryptographic and package validation, and handoff to the system package installer."
+    source_refs:
+      - file: "StarManager/App/Distribution"
+        description: "Apple platform update distribution (managed via TestFlight)"
+    entry_points:
+      - "ProfileSettingsScreen (DirectUpdateSettings under '앱 업데이트' section)"
+      - "MainActivity.onCreate (DirectUpdateManager.start background check on startup)"
+    preconditions:
+      - "Active network connectivity"
+      - "Official GitHub release assets published under armsone/StarManager-Android"
+      - "Target APK signed with matching certificate and containing newer version or build code"
+    inputs:
+      - "Installed app version (BuildConfig.VERSION_NAME) and version code (BuildConfig.VERSION_CODE)"
+      - "User automatic download preference (Boolean)"
+      - "User UI actions (check, download, cancel, retry, install)"
+    normal_result: "Verified APK file downloaded to external files directory and handed off to Android package installer via ACTION_VIEW with MIME application/vnd.android.package-archive and FLAG_GRANT_READ_URI_PERMISSION."
+    states:
+      IDLE: "Initial idle state before check or after completion"
+      CHECKING: "Querying latest release metadata from official GitHub API"
+      CURRENT: "Installed version matches or exceeds latest release"
+      AVAILABLE: "Newer release found and ready for download"
+      DOWNLOADING: "DownloadManager actively retrieving APK asset"
+      READY: "APK verified (size, SHA-256, package name, version, signature) and ready for installer handoff"
+      ERROR: "Error encountered during check, download, or verification"
+    algorithms_and_thresholds:
+      - "compareVersions: Semantic version comparison across dot-delimited segments"
+      - "SHA-256 digest validation: Computed digest matched against release asset sha256"
+      - "Package name match verification: archive.packageName == context.packageName"
+      - "Version code check: archiveCode > BuildConfig.VERSION_CODE"
+      - "Signer certificate validation: archive signer SHA-256 matched against app signatures"
+      - "Auto-download conditions: Unmetered network connection AND (charging OR battery level >= 20%)"
+      - "Release URL validation: HTTPS, host github.com, path /armsone/StarManager-Android/releases/download/{tag}/{asset}"
+    data_contracts:
+      DirectUpdateState:
+        phase: "UpdatePhase (IDLE, CHECKING, CURRENT, AVAILABLE, DOWNLOADING, READY, ERROR)"
+        automaticDownload: "Boolean"
+        version: "String?"
+        build: "Long?"
+        notes: "String?"
+        size: "Long?"
+        downloaded: "Long"
+        message: "String"
+      ReleaseAsset:
+        tag: "String"
+        version: "String"
+        build: "Long"
+        notes: "String"
+        name: "String"
+        size: "Long"
+        sha256: "String"
+        url: "String"
+    producer_consumer_routes:
+      - "DirectUpdateManager produces StateFlow<DirectUpdateState>"
+      - "DirectUpdateSettings composable in ProfileSettingsScreen consumes DirectUpdateState"
+      - "Android DownloadManager broadcasts and cursor queries consumed by DirectUpdateManager.observeDownload"
+    persistence_relaunch:
+      - "SharedPreferences (direct_updates) persists automatic_download (Boolean) and download_id (Long)"
+      - "Pending download ID restored and re-observed on app startup via DirectUpdateManager.start()"
+    permissions_privacy_security:
+      - "android.permission.INTERNET"
+      - "android.permission.ACCESS_NETWORK_STATE"
+      - "REQUEST_INSTALL_PACKAGES / Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES unknown app sources permission flow"
+      - "Strict HTTPS endpoint, repo path validation, SHA-256 checksum verification, and signing certificate validation"
+    background_lifecycle:
+      - "System DownloadManager service handles download execution in background"
+      - "Coroutine scope with SupervisorJob manages lifecycle-safe download observation and verification"
+    gestures_accessibility:
+      - "Switch toggle for automatic download with accessibility description"
+      - "LinearProgressIndicator displaying download progress"
+      - "Action buttons with clear semantic text ('다운로드', '취소', '설치', '다시 시도', '업데이트 확인')"
+    supported_devices_layouts:
+      - "Responsive layout embedded in ProfileSettingsScreen (content max width 760dp), supporting phone and tablet form factors"
+    visual_reference:
+      - "Settings section card with ArrowCircleDown icon well, switch row, progress bar, version/size info, and action buttons"
+    platform_adaptations:
+      ios:
+        status: "intentional_exception"
+        description: "TestFlight manages update discovery, download, and installation."
+      android:
+        status: "implemented_source_only"
+        description: "GitHub Releases API integration, DownloadManager, SHA-256/signature verification, and system package installer handoff."
+    intentional_differences:
+      distribution_channel: "Apple version relies on TestFlight for distribution; Android version uses direct GitHub release APK downloads with in-app integrity verification."
+    implementations:
+      ios:
+        status: "intentional_exception"
+        notes: "Managed externally by Apple TestFlight."
+      android:
+        status: "implemented_source_only"
+        entry_file: "app/src/main/java/com/armsone/starmanager/update/DirectUpdateManager.kt"
+        verification: "pending_runtime"
+    dependencies:
+      - "android.app.DownloadManager"
+      - "androidx.core.content.FileProvider"
+      - "java.security.MessageDigest"
+      - "org.json.JSONObject"
+    parity_row_ids: []
+
+  - id: "posting_handoff"
+    purpose: "Dominant Instagram sharing workflow from the Composer preview surface, copying composed post text to the system clipboard and handing off single or multiple media attachments to the OS share sheet / chooser."
+    source_refs:
+      - file: "StarManager/Features/Composer/ComposerView.swift"
+        symbol: "InstagramShareButton"
+        description: "Dominant 'Instagram으로 →' button with automatic caption clipboard copy and UIActivityViewController handoff"
+      - file: "StarManager/ViewModels/ComposerViewModel.swift"
+        symbol: "prepareShare"
+        description: "Prepares media attachments and handles clipboard copy before presenting share sheet"
+    entry_points:
+      - "ComposerScreen -> PreviewColumn -> GlossyPrimaryButton ('Instagram으로 →', testTag preview.share)"
+    preconditions:
+      - "Active post generated (state.generatedPost != null)"
+      - "Draft signature is current with active profile and inputs (draftIsCurrent() == true)"
+      - "Media attachment count is between 1 and 8 (MediaAttachmentPolicy.canShare)"
+      - "Not currently generating or preparing share (!isGenerating && !isPreparingShare)"
+    inputs:
+      - "GeneratedPost (composedText, id)"
+      - "ComposerUiState.mediaItems (1..8 items with byte data, MediaKind, and fileExtension)"
+      - "Context (ContentResolver, cacheDir, ClipboardManager)"
+    normal_result: "Composed caption text copied to system clipboard with label 'StarManager', temporary media files written to cache directory with zero-padded filenames, FileProvider content URIs generated with read permission grant, and Android chooser opened with ACTION_SEND or ACTION_SEND_MULTIPLE."
+    states:
+      idle: "Waiting for user to initiate share"
+      isPreparingShare: "Writing share files to disk and generating FileProvider URIs (shows spinner and '준비 중')"
+      valid_ready_to_share: "Post generated, media attached, draft current, share button enabled"
+      stale_draft: "Inputs changed after generation, share blocked with warning message"
+      missing_media: "0 media attached, share blocked with warning message ('사진이나 영상을 먼저 추가해 주세요.')"
+      exceeded_media_limit: ">8 media items attached, share blocked ('미디어는 최대 8개까지 공유할 수 있어요.')"
+    algorithms_and_thresholds:
+      - "Media limits: min 1, max 8 items (MediaAttachmentPolicy.MAX_ITEMS = 8)"
+      - "Draft currency check: generatedSignature == currentDraftSignature()"
+      - "MIME type resolution: image/* for all images, video/* for all videos, */* for mixed attachments"
+      - "Share directory cleanup: purge previous temporary files in cache before creating new share batch"
+      - "File naming convention: zero-padded index String.format(Locale.ROOT, '%02d.%s', index + 1, ext)"
+    data_contracts:
+      ComposerMedia:
+        id: "String"
+        data: "ByteArray"
+        kind: "MediaKind (IMAGE, VIDEO)"
+        fileExtension: "String?"
+        generatedFromPostId: "String?"
+      GeneratedPost:
+        id: "String"
+        sourceIdea: "String"
+        hook: "String"
+        caption: "String"
+        callToAction: "String"
+        hashtags: "List<String>"
+        composedText: "String"
+        targetCharacterCount: "Int"
+      DraftSignature:
+        idea: "String"
+        mood: "PostMood"
+        length: "PostLength"
+        profile: "CreatorProfile"
+    producer_consumer_routes:
+      - "ComposerViewModel.prepareShare consumes state.mediaItems and post -> generates Intent"
+      - "ComposerScreen (PreviewColumn) launches Intent.createChooser(intent, null)"
+    persistence_relaunch:
+      - "Transient in-memory composer state"
+      - "Share cache files deleted upon subsequent share preparation"
+    permissions_privacy_security:
+      - "FileProvider (com.armsone.starmanager.fileprovider) with FLAG_GRANT_READ_URI_PERMISSION"
+      - "Temporary export files scoped to app-internal cache directory (context.cacheDir/share)"
+      - "Original user media preserved in storage/gallery"
+      - "Explicit clipboard write without leaking background data"
+    background_lifecycle:
+      - "File generation executed on Dispatchers.IO within CoroutineScope"
+      - "resetVersion check guards against stale async completion if composer reset during preparation"
+    gestures_accessibility:
+      - "GlossyPrimaryButton with testTag preview.share, Send icon, and distinct loading state"
+      - "Accessible status/error announcements for share validation messages (testTag preview.shareMessage)"
+    supported_devices_layouts:
+      - "Compact layout (single column, max width 680dp)"
+      - "Regular layout (2 columns side-by-side, max width 1120dp for screen width >= 600dp)"
+    visual_reference:
+      - "Dominant glossy primary button ('Instagram으로 →', Send icon, 17sp bold text)"
+      - "Caption copy notice ('문구는 자동 복사됩니다')"
+      - "Media preview pager with page indicator badge ('1/N')"
+    platform_adaptations:
+      ios:
+        status: "reference_verified"
+        description: "Presents UIActivityViewController with media items and text directly in system share sheet."
+      android:
+        status: "build_verified_runtime_pending"
+        description: "Copies text to Android ClipboardManager, creates ACTION_SEND or ACTION_SEND_MULTIPLE with FileProvider content URIs, ClipData, and FLAG_GRANT_READ_URI_PERMISSION, and presents system chooser."
+    intentional_differences:
+      clipboard_precopy: "Instagram for Android does not reliably accept pre-populated EXTRA_TEXT alongside media attachments; text is automatically copied to system clipboard prior to opening the system chooser."
+      share_sheet: "iOS uses UIActivityViewController; Android uses Intent.createChooser with ACTION_SEND / ACTION_SEND_MULTIPLE."
+      mime_generalization: "Android generalizes mixed media streams to */* MIME type."
+    implementations:
+      ios:
+        status: "reference_verified"
+        entry_file: "StarManager/Features/Composer/ComposerView.swift"
+        verification: "reference_verified"
+      android:
+        status: "build_verified_runtime_pending"
+        entry_file: "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt"
+        verification: "Unit tests, debug build, and lint passed; runtime behavior and visual parity remain pending."
+    dependencies:
+      - "androidx.core.content.FileProvider"
+      - "android.content.ClipboardManager"
+      - "android.content.Intent"
+      - "com.armsone.starmanager.design.GlossyPrimaryButton"
+    parity_row_ids:
+      - "composer_posting_handoff_dominant_action"
+      - "composer_posting_handoff_single_attachment"
+      - "composer_posting_handoff_multiple_attachments"
+      - "composer_posting_handoff_mime_types"
+      - "composer_posting_handoff_guards"
+
+  - id: "simplified_preferences_and_settings_order"
+    purpose: "Unified Settings screen layout matching the exact 8-section top-to-bottom iPhone contract with simplified preference fields and exact section footers, removing obsolete tone sliders and topic/audience fields while maintaining model persistence."
+    source_refs:
+      - file: "StarManager/Features/Settings/ProfileSettingsView.swift"
+        description: "iPhone Settings view top-to-bottom contract with simplified preferences"
+    entry_points:
+      - "ProfileSettingsScreen"
+    preconditions:
+      - "CreatorProfileStore initialized"
+    inputs:
+      - "User preferences (voice, emoji toggle, style preset, mood, length, character count, extra instructions, prohibited phrases, hashtags, theme)"
+    normal_result: "Unified settings displayed and persisted in order: 내 프리셋, 기본 설정, 글쓰기 취향, 추가 옵션, 프리셋 보관, 외부 AI 로그인 관리, 앱 업데이트, 테마 관리."
+    states:
+      IDLE: "Viewing and editing settings"
+    algorithms_and_thresholds:
+      - "Slider character count: 50..500 step 10"
+      - "Additional instructions field: 1..3 lines"
+    data_contracts:
+      CreatorProfile:
+        voice: "String"
+        usesEmoji: "Boolean"
+        mood: "PostMood"
+        preferredLength: "PostLength"
+        controls: "GenerationControls"
+        additionalInstructions: "String?"
+        prohibitedPhrases: "String"
+        hashtagStyle: "String"
+    producer_consumer_routes:
+      - "ProfileSettingsScreen consumes and mutates CreatorProfileStore StateFlow"
+    persistence_relaunch:
+      - "SharedPreferences / JSON storage via CreatorProfileStore"
+    permissions_privacy_security:
+      - "Local device storage only"
+    background_lifecycle:
+      - "StateFlow lifecycle observation via collectAsStateWithLifecycle"
+    gestures_accessibility:
+      - "Segmented controls, switches, sliders, text fields, and preset action icons with clear testTags and semantics"
+    supported_devices_layouts:
+      - "Content max width 760dp, responsive single/multi-column style presets"
+    visual_reference:
+      - "Settings sections with icon wells, rounded cards, custom dividers, and explicit footers"
+    platform_adaptations:
+      ios:
+        status: "reference_verified"
+        description: "Native SwiftUI SettingsView"
+      android:
+        status: "runtime_verified_visual_unpaired"
+        description: "Compose ProfileSettingsScreen rendered on Samsung SM-F968N with all 8 sections in the requested order; paired iOS visual evidence remains missing"
+    intentional_differences:
+      section_placement: "앱 업데이트 and 테마 관리 placed at bottom as requested"
+    implementations:
+      ios:
+        status: "reference_verified"
+        entry_file: "StarManager/Features/Settings/ProfileSettingsView.swift"
+        verification: "reference_verified"
+      android:
+        status: "runtime_verified_visual_unpaired"
+        entry_file: "app/src/main/java/com/armsone/starmanager/ui/settings/ProfileSettingsScreen.kt"
+        verification: "65 unit tests, debug build, and lint passed; Android runtime section order captured; paired iOS visual capture pending"
+    dependencies:
+      - "androidx.compose.material3"
+      - "com.armsone.starmanager.model.CreatorProfileStore"
+    parity_row_ids:
+      - "settings_section_order_parity"
+      - "settings_simplified_preferences_surface"
+
+  - id: "external_ai_login_session_reuse"
+    purpose: "Dedicated in-app full-screen WebView management for external AI provider logins (Gemini, ChatGPT, Claude) with persistent CookieManager and WebStorage session reuse across settings and composer."
+    source_refs:
+      - file: "StarManager/Features/Settings/ProfileSettingsView.swift"
+        description: "External AI login rows opening provider web surfaces"
+    entry_points:
+      - "ProfileSettingsScreen -> 외부 AI 로그인 관리 -> 로그인 열기"
+    preconditions:
+      - "Active network connection"
+    inputs:
+      - "Target provider (Gemini, ChatGPT, Claude)"
+    normal_result: "App-owned full-screen WebView surface opens provider official URL; persistent cookies and DOM storage allow user to log in and stay logged in."
+    states:
+      CONNECTING: "Loading official provider login host"
+      READY: "Interactive login page ready"
+    algorithms_and_thresholds:
+      - "URL allowlist validation: strict HTTPS and verified provider domain suffixes and OAuth/SSO login hosts"
+    data_contracts:
+      DirectAIProvider:
+        GEMINI: "https://gemini.google.com/app"
+        OPEN_AI: "https://chatgpt.com/"
+        CLAUDE: "https://claude.ai/new"
+    producer_consumer_routes:
+      - "ProfileSettingsScreen launches ExternalAISurface(mode = LOGIN)"
+    persistence_relaunch:
+      - "Android CookieManager and WebStorage retain session tokens across launches"
+    permissions_privacy_security:
+      - "Zero credential capture or logging by the app; strict HTTPS host allowlist"
+    background_lifecycle:
+      - "WebView lifecycle stopped and destroyed on dispose"
+    gestures_accessibility:
+      - "Close button, back handling, and truthful header status"
+    supported_devices_layouts:
+      - "Full screen responsive surface"
+    visual_reference:
+      - "Full screen surface with provider title, close icon, and native WebView"
+    platform_adaptations:
+      ios:
+        status: "reference_verified"
+        description: "SFSafariViewController / WKWebView login management"
+      android:
+        status: "partially_runtime_verified"
+        description: "ChatGPT full-screen login surface and official page load verified on device; Gemini, Claude, and authenticated session persistence remain pending"
+    intentional_differences:
+      storage_engine: "Android uses default CookieManager and WebSettings DOM storage"
+    implementations:
+      ios:
+        status: "reference_verified"
+        entry_file: "StarManager/Features/Settings/ProfileSettingsView.swift"
+        verification: "reference_verified"
+      android:
+        status: "partially_runtime_verified"
+        entry_file: "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAISurface.kt"
+        verification: "ChatGPT login surface open/load/close verified on Samsung SM-F968N without entering credentials; other providers and authenticated persistence pending"
+    dependencies:
+      - "android.webkit.WebView"
+      - "android.webkit.CookieManager"
+    parity_row_ids:
+      - "settings_external_ai_login_management"
+
+  - id: "external_ai_provider_roster_and_composer_browser"
+    purpose: "External AI provider choices (Gemini, ChatGPT, Claude) in single horizontal row in Composer, opening directly into an app-owned full-screen WebView browser with automated compact prompt filling, response extraction/cleaning, and manual fallback actions."
+    source_refs:
+      - file: "StarManager/Features/Composer/ComposerView.swift"
+        description: "AI choice row and in-app web browser for AI generation"
+    entry_points:
+      - "ComposerScreen -> AIChoiceCard / GlossyPrimaryButton ('{provider}에서 만들기')"
+    preconditions:
+      - "Non-empty user idea entered"
+    inputs:
+      - "User idea, selected provider (Gemini, ChatGPT, Claude, 기기 AI), compact prompt"
+    normal_result: "In-app WebView opens provider, automates prompt filling, detects and cleans generated answer, and imports into Composer preview."
+    states:
+      CONNECTING: "Connecting to provider URL"
+      WAITING_FOR_INPUT: "Waiting for DOM input element"
+      INPUT_READY: "Prompt populated in input area"
+      GENERATING: "Observing assistant streaming answer"
+      COMPLETED: "Stable answer extracted, cleaned, and imported"
+    algorithms_and_thresholds:
+      - "DOM selector matching for ProseMirror, Lexical, textarea, and contenteditable"
+      - "Answer cleaning: strip think tags, markdown code fences, preambles, and quotes"
+    data_contracts:
+      AIChoice:
+        External: "Gemini, ChatGPT, Claude"
+        OnDevice: "기기 AI"
+    producer_consumer_routes:
+      - "ComposerScreen launches ExternalAISurface(mode = GENERATION) -> onImport -> ComposerViewModel.importAIResult"
+    persistence_relaunch:
+      - "Shared CookieManager cookies across sessions"
+    permissions_privacy_security:
+      - "Strict HTTPS allowlist, no credentials logged or exposed"
+    background_lifecycle:
+      - "WebView destroyed on surface dismiss; state updated via StateFlow"
+    gestures_accessibility:
+      - "Buttons for '다시 넣기', '문구 복사', '가져오기', close icon, and back gesture"
+    supported_devices_layouts:
+      - "Horizontal single-row cards on normal text scale, full-screen generation surface"
+    visual_reference:
+      - "Brand icon cards in order Gemini, ChatGPT, Claude, 기기 AI, glossy action button"
+    platform_adaptations:
+      ios:
+        status: "reference_verified"
+        description: "WKWebView automation and Apple Intelligence"
+      android:
+        status: "runtime_roster_verified_generation_pending"
+        description: "Provider roster rendered in order on device; AndroidView WebView generation automation remains runtime-pending"
+    intentional_differences:
+      local_ai_label: "Android uses '기기 AI' for local deterministic generator as Apple Intelligence is unavailable"
+    implementations:
+      ios:
+        status: "reference_verified"
+        entry_file: "StarManager/Features/Composer/ComposerView.swift"
+        verification: "reference_verified"
+      android:
+        status: "runtime_roster_verified_generation_pending"
+        entry_file: "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAISurface.kt"
+        verification: "Provider order verified on Samsung SM-F968N; prompt fill, submit, stable extraction, and import remain runtime-pending"
+    dependencies:
+      - "android.webkit.WebView"
+      - "android.webkit.CookieManager"
+    parity_row_ids:
+      - "composer_external_ai_provider_roster"
+      - "composer_external_ai_in_app_browser"
+      - "external_ai_answer_cleaner_parity"
+
+  - id: "compact_generation_prompt"
+    purpose: "Compact generation prompt parity generating [내가 입력한 내용], [원하는 결과], strict Korean bullet rules, and conditional [추가 요청]."
+    source_refs:
+      - file: "StarManager/Models/CreatorProfile.swift"
+        description: "generationPrompt assembly logic"
+    entry_points:
+      - "CreatorProfile.generationPrompt"
+      - "ExternalPromptBuilder.build"
+      - "ComposerViewModel.externalPrompt"
+    preconditions:
+      - "CreatorProfile and user idea"
+    inputs:
+      - "idea, mood, length, profile settings"
+    normal_result: "Structured compact Korean prompt string ready for external AI web automation or clipboard copy."
+    states:
+      READY: "Prompt generated synchronously"
+    algorithms_and_thresholds:
+      - "Exact character count bullet"
+      - "Two consecutive Korean hashtags bullet"
+      - "Mood, voice, story weight instruction bullet"
+      - "Sentence linebreak bullet"
+      - "Restrained emoji policy bullet"
+      - "Emoji-wrapped summary line bullet"
+      - "Prohibited phrases bullet (if nonempty)"
+      - "Hashtag style bullet (if nonempty)"
+      - "[추가 요청] section (appended only if trimmed additional instructions nonempty)"
+    data_contracts:
+      generationPrompt: "String"
+    producer_consumer_routes:
+      - "CreatorProfile.generationPrompt -> ExternalPromptBuilder.build -> ComposerViewModel.externalPrompt -> ExternalAISurface"
+    persistence_relaunch:
+      - "Generated dynamically from persisted profile"
+    permissions_privacy_security:
+      - "Local string construction"
+    background_lifecycle:
+      - "Synchronous function"
+    gestures_accessibility:
+      - "N/A"
+    supported_devices_layouts:
+      - "N/A"
+    visual_reference:
+      - "Plain text structured prompt"
+    platform_adaptations:
+      ios:
+        status: "reference_verified"
+        description: "Swift generationPrompt"
+      android:
+        status: "unit_test_verified_runtime_pending"
+        description: "Kotlin generationPrompt on CreatorProfile with deterministic JVM coverage"
+    intentional_differences:
+      none: "Identical prompt format"
+    implementations:
+      ios:
+        status: "reference_verified"
+        entry_file: "StarManager/Models/CreatorProfile.swift"
+        verification: "reference_verified"
+      android:
+        status: "unit_test_verified_runtime_pending"
+        entry_file: "app/src/main/java/com/armsone/starmanager/model/CreatorProfile.kt"
+        verification: "65-test JVM suite passed including compact section order/content and conditional additional request; live WebView payload pending"
+    dependencies:
+      - "com.armsone.starmanager.model.CreatorProfile"
+    parity_row_ids:
+      - "compact_generation_prompt_parity"

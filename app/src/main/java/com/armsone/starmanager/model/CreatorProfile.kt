@@ -23,6 +23,40 @@ data class CreatorProfile(
     fun withControls(newControls: GenerationControls): CreatorProfile =
         copy(generationControls = newControls)
 
+    fun generationPrompt(
+        idea: String,
+        mood: PostMood = this.mood,
+        length: PostLength = this.preferredLength
+    ): String = buildString {
+        append("[내가 입력한 내용]\n")
+        append(idea.trim())
+        append("\n\n[원하는 결과]\n")
+        append("다른 설명 없이 완성된 인스타그램 본문 산문만 작성해 주세요.\n")
+        append("- 공백과 줄바꿈을 포함해 정확히 ${controls.characterCount}자로 작성\n")
+        append("- 첫 줄에 한글 해시태그 2개 연속 작성\n")
+        append("- 본문: ${mood.rawValue}, $voice, ${length.promptInstruction}\n")
+        append("- 문장마다 줄바꿈하고 상투적인 표현 없이 자연스럽게 작성\n")
+        if (usesEmoji) {
+            append("- 본문 이모지는 문단 앞쪽에만 절제해서 사용\n")
+        } else {
+            append("- 마지막 요약 줄의 필수 이모지를 제외하고 본문 이모지는 사용하지 않음\n")
+        }
+        append("- 마지막 줄은 전체 요약 1줄로 작성하고 앞뒤에 이모지 배치\n")
+        val cleanProhibited = prohibitedPhrases.trim()
+        if (cleanProhibited.isNotEmpty()) {
+            append("- 금지 표현: $cleanProhibited\n")
+        }
+        val cleanHashtag = hashtagStyle.trim()
+        if (cleanHashtag.isNotEmpty()) {
+            append("- 해시태그 취향: $cleanHashtag\n")
+        }
+        val extra = (additionalInstructions ?: "").trim()
+        if (extra.isNotEmpty()) {
+            append("\n[추가 요청]\n")
+            append(extra)
+        }
+    }.trimEnd()
+
     fun prompt(idea: String): String {
         val activeGuidelines = writingGuidelines
             .split("\n")

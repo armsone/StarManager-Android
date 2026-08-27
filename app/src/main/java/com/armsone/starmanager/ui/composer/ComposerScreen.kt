@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.ContentValues
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
@@ -140,6 +141,8 @@ import com.armsone.starmanager.model.GenerationStylePreset
 import com.armsone.starmanager.model.PostLength
 import com.armsone.starmanager.model.PostMood
 import com.armsone.starmanager.service.DirectAIProvider
+import com.armsone.starmanager.ui.externalai.ExternalAISurface
+import com.armsone.starmanager.ui.externalai.ExternalAISurfaceMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
@@ -614,43 +617,11 @@ private fun BorderedActionButton(
 @Composable
 private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val appearance = LocalAppAppearance.current
     val trimmedIdeaEmpty = state.idea.trim().isEmpty()
-    var selectedChoiceId by rememberSaveable { mutableStateOf(AIChoice.External(DirectAIProvider.OPEN_AI).id) }
-    var confirmingProvider by remember { mutableStateOf<DirectAIProvider?>(null) }
-    val selectedChoice = AIChoice.all.first { it.id == selectedChoiceId }
-    var isPasteGuidanceVisible by rememberSaveable { mutableStateOf(false) }
-
-    val pendingProvider = state.pendingExternalProvider
-
-    DisposableEffect(lifecycleOwner, pendingProvider) {
-        var departed = lifecycleOwner.lifecycle.currentState < Lifecycle.State.RESUMED
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_PAUSE -> departed = true
-                Lifecycle.Event.ON_RESUME -> {
-                    if (departed && pendingProvider != null) {
-                        departed = false
-                        if (viewModel.shouldShowPasteGuidance(context)) {
-                            isPasteGuidanceVisible = true
-                            viewModel.markPasteGuidanceShown(context)
-                        }
-                    }
-                }
-                else -> Unit
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
-
-    LaunchedEffect(pendingProvider) {
-        if (pendingProvider == null) {
-            isPasteGuidanceVisible = false
-        }
-    }
+    var selectedChoiceId by rememberSaveable { mutableStateOf(AIChoice.External(DirectAIProvider.GEMINI).id) }
+    var activeExternalProvider by rememberSaveable { mutableStateOf<DirectAIProvider?>(null) }
+    val selectedChoice = AIChoice.all.firstOrNull { it.id == selectedChoiceId } ?: AIChoice.all.first()
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         val columns = if (LocalDensity.current.fontScale >= 1.3f) 2 else 4
@@ -675,18 +646,12 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
                 when (selectedChoice) {
                     AIChoice.OnDevice -> viewModel.generateDraft()
                     is AIChoice.External -> {
-                        if (selectedChoice.provider == DirectAIProvider.GEMINI) {
-                            val intent = viewModel.sharePrompt(DirectAIProvider.GEMINI, context)
-                            if (intent != null) {
-                                context.startActivity(android.content.Intent.createChooser(intent, null))
-                            }
-                        } else {
-                            confirmingProvider = selectedChoice.provider
-                        }
+                        activeExternalProvider = selectedChoice.provider
                     }
                 }
             },
             enabled = !trimmedIdeaEmpty && !state.isGenerating,
+            appearance = appearance,
             modifier = Modifier.testTag("composer.ai.run")
         ) {
             if (state.isGenerating) {
@@ -700,7 +665,7 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
                     "게시물을 만드는 중…"
                 } else {
                     when (selectedChoice) {
-                        AIChoice.OnDevice -> "AI로 만들기"
+                        AIChoice.OnDevice -> "기기 AI로 만들기"
                         is AIChoice.External -> "${selectedChoice.provider.title}에서 만들기"
                     }
                 },
@@ -710,33 +675,8 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
             )
         }
 
+        val pendingProvider = state.pendingExternalProvider
         if (pendingProvider != null) {
-            if (isPasteGuidanceVisible) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(BrandTheme.accent.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
-                        .border(1.dp, BrandTheme.accent.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
-                        .testTag("composer.pasteGuidance"),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        Icons.Outlined.Info,
-                        contentDescription = null,
-                        tint = BrandTheme.accent,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        "Android에는 별도의 붙여넣기 설정이 없습니다. 외부 앱에서 결과를 복사한 뒤 돌아와 [붙여넣기]를 누르면 바로 가져올 수 있습니다.",
-                        fontSize = 12.sp,
-                        color = BrandTheme.ink,
-                        lineHeight = 16.sp
-                    )
-                }
-            }
-
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -762,18 +702,18 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
         }
     }
 
-    val dialogProvider = confirmingProvider
-    if (dialogProvider != null) {
-        ExternalProviderConfirmDialog(
-            provider = dialogProvider,
-            onConfirm = {
-                confirmingProvider = null
-                val intent = viewModel.sharePrompt(dialogProvider, context)
-                if (intent != null) {
-                    context.startActivity(android.content.Intent.createChooser(intent, null))
-                }
+    val externalProvider = activeExternalProvider
+    if (externalProvider != null) {
+        ExternalAISurface(
+            provider = externalProvider,
+            mode = ExternalAISurfaceMode.GENERATION,
+            prompt = viewModel.externalPrompt(),
+            onClose = { activeExternalProvider = null },
+            onImport = { text ->
+                viewModel.importAIResult(text, externalProvider)
+                activeExternalProvider = null
             },
-            onCancel = { confirmingProvider = null }
+            appearance = appearance
         )
     }
 }
@@ -830,32 +770,6 @@ private fun AIChoiceCard(
     }
 }
 
-/** 공유 화면으로 나가기 전에 목적지와 이유를 알리는 앱 소유 확인창 — 취소 시 상태 변화 없음. */
-@Composable
-private fun ExternalProviderConfirmDialog(
-    provider: DirectAIProvider,
-    onConfirm: () -> Unit,
-    onCancel: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text("${provider.title} 앱에서 만들까요?") },
-        text = {
-            Text("공유 화면에서 ${provider.title} 앱을 선택하세요. 결과를 복사해 돌아오면 스타메니저에서 가져올 수 있습니다.")
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm, modifier = Modifier.testTag("composer.externalConfirm")) {
-                Text("공유 화면 열기", color = BrandTheme.accent)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onCancel, modifier = Modifier.testTag("composer.externalCancel")) {
-                Text("취소", color = BrandTheme.labelSecondary)
-            }
-        }
-    )
-}
-
 @Composable
 private fun DisclosureHeader(
     title: String,
@@ -895,25 +809,50 @@ private fun DisclosureHeader(
     }
 }
 
-/**
- * iOS ChatGPTBrand/GeminiBrand/GrokBrand 이미지셋 대응.
- * scripts/copy-ios-assets.sh 로 복사된 drawable(brand_chatgpt 등)이 있으면 그대로 쓰고,
- * 없으면 첫 글자 배지로 대체한다.
- */
 @Composable
 private fun BrandIcon(provider: DirectAIProvider) {
-    val resId = when (provider) {
-        DirectAIProvider.OPEN_AI -> R.drawable.brand_chatgpt
-        DirectAIProvider.GEMINI -> R.drawable.brand_gemini
-        DirectAIProvider.GROK -> R.drawable.brand_grok
+    when (provider) {
+        DirectAIProvider.OPEN_AI -> Image(
+            painter = painterResource(R.drawable.brand_chatgpt),
+            contentDescription = provider.title,
+            modifier = Modifier
+                .size(26.dp)
+                .clip(RoundedCornerShape(7.dp))
+        )
+        DirectAIProvider.GEMINI -> Image(
+            painter = painterResource(R.drawable.brand_gemini),
+            contentDescription = provider.title,
+            modifier = Modifier
+                .size(26.dp)
+                .clip(RoundedCornerShape(7.dp))
+        )
+        DirectAIProvider.CLAUDE -> Box(
+            modifier = Modifier
+                .size(26.dp)
+                .background(Color(0xFFD97706), RoundedCornerShape(7.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "C",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
+        DirectAIProvider.GROK -> Box(
+            modifier = Modifier
+                .size(26.dp)
+                .background(Color.Black, RoundedCornerShape(7.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "G",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
     }
-    Image(
-        painter = painterResource(resId),
-        contentDescription = provider.title,
-        modifier = Modifier
-            .size(26.dp)
-            .clip(RoundedCornerShape(7.dp))
-    )
 }
 
 // MARK: - 미디어 순서 편집
@@ -1309,9 +1248,10 @@ private fun PreviewColumn(viewModel: ComposerViewModel, state: ComposerUiState) 
                         scope.launch {
                             val intent = viewModel.prepareShare(post, context)
                             if (intent != null) {
-                                context.startActivity(
-                                    android.content.Intent.createChooser(intent, null)
-                                )
+                                val chooser = Intent.createChooser(intent, null).apply {
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(chooser)
                             }
                         }
                     },
@@ -1376,10 +1316,11 @@ private fun PreviewColumn(viewModel: ComposerViewModel, state: ComposerUiState) 
 }
 
 private fun sourceIcon(source: CaptionSource): ImageVector = when (source) {
-    CaptionSource.DEVICE -> Icons.Filled.AutoAwesome
+    CaptionSource.DEVICE -> Icons.Filled.Smartphone
     CaptionSource.DETERMINISTIC -> Icons.Filled.Smartphone
-    CaptionSource.CHAT_GPT -> Icons.Filled.Forum
     CaptionSource.GEMINI -> Icons.Outlined.Diamond
+    CaptionSource.CHAT_GPT -> Icons.Filled.Forum
+    CaptionSource.CLAUDE -> Icons.Filled.AutoAwesome
     CaptionSource.GROK -> Icons.Filled.Close
 }
 

@@ -1,0 +1,409 @@
+{
+  "ledger_version": 1,
+  "rows": [
+    {
+      "id": "composer_posting_handoff_dominant_action",
+      "route_state": "composer_generated_valid",
+      "element": "button",
+      "dimension": "interaction",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "Dominant 'Instagram으로 →' button with automatic caption clipboard copy and UIActivityViewController handoff",
+        "location": "StarManager/Views/ComposerView.swift"
+      },
+      "target_observation": "Dominant 'Instagram으로 →' GlossyPrimaryButton with automatic caption clipboard copy, FileProvider preparation, and Intent.createChooser",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt:1175",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-27",
+          "action": "Implemented Android dominant Instagram handoff button with clipboard copy and system chooser in ComposerScreen.kt",
+          "result": "implemented in source; runtime verification pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-27",
+          "action": "Verified dominant share button implementation via unit tests, assembleDebug build, and lintDebug checks",
+          "result": "Unit tests, assembleDebug, and lintDebug passed; runtime behavior and visual verification pending"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
+      "id": "composer_posting_handoff_single_attachment",
+      "route_state": "composer_generated_valid",
+      "element": "intent",
+      "dimension": "integration",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "Single image/video attached to UIActivityViewController",
+        "location": "StarManager/ViewModels/ComposerViewModel.swift"
+      },
+      "target_observation": "ACTION_SEND with FileProvider content URI, FLAG_GRANT_READ_URI_PERMISSION, ClipData, and EXTRA_STREAM",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerViewModel.kt:496",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-27",
+          "action": "Implemented ACTION_SEND intent with single FileProvider URI, ClipData, and FLAG_GRANT_READ_URI_PERMISSION",
+          "result": "implemented in source; runtime verification pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-27",
+          "action": "Verified single attachment ACTION_SEND intent preparation via unit tests, assembleDebug build, and lintDebug checks",
+          "result": "Unit tests, assembleDebug, and lintDebug passed; runtime behavior and visual verification pending"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
+      "id": "composer_posting_handoff_multiple_attachments",
+      "route_state": "composer_generated_valid",
+      "element": "intent",
+      "dimension": "integration",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "Multiple media items attached to UIActivityViewController in user-defined order",
+        "location": "StarManager/ViewModels/ComposerViewModel.swift"
+      },
+      "target_observation": "ACTION_SEND_MULTIPLE with FileProvider content URIs, FLAG_GRANT_READ_URI_PERMISSION, multi-item ClipData, and EXTRA_STREAM ArrayList",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerViewModel.kt:496",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-27",
+          "action": "Implemented ACTION_SEND_MULTIPLE intent with ArrayList of FileProvider URIs, multi-item ClipData, and FLAG_GRANT_READ_URI_PERMISSION",
+          "result": "implemented in source; runtime verification pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-27",
+          "action": "Verified multiple attachment ACTION_SEND_MULTIPLE intent preparation via unit tests, assembleDebug build, and lintDebug checks",
+          "result": "Unit tests, assembleDebug, and lintDebug passed; runtime behavior and visual verification pending"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
+      "id": "composer_posting_handoff_mime_types",
+      "route_state": "composer_generated_valid",
+      "element": "intent",
+      "dimension": "data_flow",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "Image and/or movie media attachments",
+        "location": "StarManager/ViewModels/ComposerViewModel.swift"
+      },
+      "target_observation": "image/* for images only, video/* for videos only, */* for mixed attachments",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerModels.kt:71",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-27",
+          "action": "Implemented MediaAttachmentPolicy.mimeTypeFor resolving image/*, video/*, and */* for mixed media attachments",
+          "result": "implemented in source; runtime verification pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-27",
+          "action": "Verified MIME type resolution logic via unit tests, assembleDebug build, and lintDebug checks",
+          "result": "Unit tests, assembleDebug, and lintDebug passed; runtime behavior and visual verification pending"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
+      "id": "composer_posting_handoff_guards",
+      "route_state": "composer_generated_valid",
+      "element": "guard",
+      "dimension": "behavior",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "Blocked when 0 media, >8 media, stale draft, or preparing",
+        "location": "StarManager/ViewModels/ComposerViewModel.swift"
+      },
+      "target_observation": "Blocked when 0 media, >8 media, stale draft, or isPreparingShare/isGenerating",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerViewModel.kt:411",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-27",
+          "action": "Implemented guard validation preventing share on empty media, >8 media limit, stale draft, or active generation/preparation",
+          "result": "implemented in source; runtime verification pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-27",
+          "action": "Verified share precondition guards and validation rules via unit tests, assembleDebug build, and lintDebug checks",
+          "result": "Unit tests, assembleDebug, and lintDebug passed; runtime behavior and visual verification pending"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
+      "id": "settings_section_order_parity",
+      "route_state": "settings_main",
+      "element": "section",
+      "dimension": "structure",
+      "classification": "visual",
+      "source_ref": {
+        "kind": "source",
+        "value": "8 sections in exact contract order top-to-bottom",
+        "location": "StarManager/Views/SettingsView.swift"
+      },
+      "target_observation": "Settings screen rendered in order: 내 프리셋, 기본 설정, 글쓰기 취향, 추가 옵션, 프리셋 보관, 외부 AI 로그인 관리, 앱 업데이트, 테마 관리",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/settings/ProfileSettingsScreen.kt:89",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-27",
+          "action": "Reorganized ProfileSettingsScreen to match iPhone 8-section top-to-bottom layout with explicit footers and update/theme sections at the bottom",
+          "result": "implemented in source; runtime verification pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-27",
+          "action": "Installed on Samsung SM-F968N and captured the full Android settings route from top to bottom",
+          "result": "All 8 sections observed in the requested order; paired post-change iOS capture remains missing, so visual status stays source-only"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
+      "id": "settings_simplified_preferences_surface",
+      "route_state": "settings_main",
+      "element": "surface",
+      "dimension": "visual",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "Simplified preference cards without obsolete tone sliders or topic/audience inputs",
+        "location": "StarManager/Views/SettingsView.swift"
+      },
+      "target_observation": "Simplified preferences displaying only voice, emoji switch, 4 style cards, mood, story weight, character count, and 1..3 line additional request",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/settings/ProfileSettingsScreen.kt:120",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-27",
+          "action": "Removed topic/audience and five tone sliders from settings UI while preserving model fields for backward compatibility",
+          "result": "implemented in source; runtime verification pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-27",
+          "action": "Inspected the simplified preferences surface on Samsung SM-F968N",
+          "result": "Voice, emoji, style, mood, story weight, character count, and additional options rendered; edit persistence was not mutated during verification"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
+      "id": "settings_external_ai_login_management",
+      "route_state": "settings_main",
+      "element": "surface",
+      "dimension": "interaction",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "External AI login rows in order Gemini, ChatGPT, Claude opening in-app web login",
+        "location": "StarManager/Views/SettingsView.swift"
+      },
+      "target_observation": "Rows in order Gemini, ChatGPT, Claude with '로그인 열기' opening full-screen ExternalAISurface WebView with title '{provider} 로그인', close button, and persistent CookieManager/WebStorage session reuse",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/settings/ProfileSettingsScreen.kt:254",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "settings_ai_runtime_trace_20260827",
+          "type": "behavior_trace",
+          "path": ".parity/evidence/settings_ai_20260827/runtime-trace.md",
+          "sha256": "b7446395421af9ee39c9b3ada6b4421d7e0c983001d12255de9d123f1c8dff2b",
+          "post_change": true
+        }
+      ],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-27",
+          "action": "Implemented External AI login management section and full-screen WebView with CookieManager persistence and exact footer notice",
+          "result": "implemented in source; runtime verification pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-27",
+          "action": "Opened ChatGPT login from settings on Samsung SM-F968N, confirmed official page load, and closed back to the app",
+          "result": "ChatGPT open/load/close passed without credentials; Gemini, Claude, and authenticated persistence remain pending"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
+      "id": "composer_external_ai_provider_roster",
+      "route_state": "composer_initial",
+      "element": "card",
+      "dimension": "structure",
+      "classification": "visual",
+      "source_ref": {
+        "kind": "source",
+        "value": "AI choice row in order Gemini, ChatGPT, Claude, and on-device choice",
+        "location": "StarManager/Views/ComposerView.swift"
+      },
+      "target_observation": "Single horizontal row on normal font scale with large icons and small labels for Gemini, ChatGPT, Claude, and '기기 AI'; Grok excluded from UI",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt:623",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-27",
+          "action": "Updated AIChoice roster and Composer UI to display Gemini, ChatGPT, Claude, and 기기 AI in a single responsive row",
+          "result": "implemented in source; runtime verification pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-27",
+          "action": "Inspected the composer provider row on Samsung SM-F968N",
+          "result": "Gemini, ChatGPT, Claude, and 기기 AI observed in order; paired iOS capture remains missing"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
+      "id": "composer_external_ai_in_app_browser",
+      "route_state": "composer_initial",
+      "element": "browser",
+      "dimension": "interaction",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "In-app WebView browser directly opening on AI choice with prompt injection and answer extraction",
+        "location": "StarManager/Views/ComposerView.swift"
+      },
+      "target_observation": "Direct full-screen in-app WebView without share chooser or confirm dialog, automating prompt fill and submit, with response observation, result cleaning, and fallback actions",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAISurface.kt:56",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-27",
+          "action": "Built full-screen ExternalAISurface composable with DOM automation, answer extraction, host allowlisting, and fallback buttons",
+          "result": "implemented in source; runtime verification pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-27",
+          "action": "Added old-answer baseline protection, confirmed-submit gating, and three stable non-streaming poll requirement; ran unit tests, build, and lint",
+          "result": "Source and deterministic tests passed; live prompt fill, submit, stable extraction, and import remain pending"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
+      "id": "compact_generation_prompt_parity",
+      "route_state": "common",
+      "element": "prompt",
+      "dimension": "data_flow",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "generationPrompt with [내가 입력한 내용], [원하는 결과], and bullet points",
+        "location": "StarManager/Models/CreatorProfile.swift"
+      },
+      "target_observation": "Structured Korean compact prompt outputting [내가 입력한 내용], [원하는 결과], character count, 2 hashtags, mood/voice/length, sentence linebreaks, emoji policy, emoji-wrapped summary, prohibited phrases, and conditional [추가 요청]",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/model/CreatorProfile.kt:26",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-27",
+          "action": "Implemented CreatorProfile.generationPrompt and connected ExternalPromptBuilder to use the compact prompt format",
+          "result": "implemented in source; runtime verification pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-27",
+          "action": "Ran deterministic compact prompt tests in the 65-test JVM suite",
+          "result": "Section order, exact rules, and conditional additional request passed; live provider payload pending"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
+      "id": "external_ai_answer_cleaner_parity",
+      "route_state": "common",
+      "element": "utility",
+      "dimension": "data_flow",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "AI response post-processing and text cleaning",
+        "location": "StarManager/ViewModels/ComposerViewModel.swift"
+      },
+      "target_observation": "ExternalAIAnswerCleaner stripping think tags, markdown code fences, conversational preambles, prompt reflections, and wrapping quotes",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAIAnswerCleaner.kt:3",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-27",
+          "action": "Implemented and unit-tested ExternalAIAnswerCleaner integrated into ComposerViewModel.importAIResult",
+          "result": "implemented in source; runtime verification pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-27",
+          "action": "Ran deterministic answer-cleaning and stable-result reducer tests in the 65-test JVM suite",
+          "result": "Cleaner and stability logic passed; live provider DOM output remains pending"
+        }
+      ],
+      "reopen_history": []
+    }
+  ]
+}

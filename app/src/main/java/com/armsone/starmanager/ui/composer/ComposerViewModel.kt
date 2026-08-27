@@ -2,6 +2,7 @@ package com.armsone.starmanager.ui.composer
 
 import android.content.ContentResolver
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -21,6 +22,7 @@ import com.armsone.starmanager.model.PostMood
 import com.armsone.starmanager.service.DeterministicCaptionGenerator
 import com.armsone.starmanager.service.DirectAIProvider
 import com.armsone.starmanager.service.ExternalPromptBuilder
+import com.armsone.starmanager.ui.externalai.ExternalAIAnswerCleaner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -249,12 +251,13 @@ class ComposerViewModel : ViewModel() {
     }
 
     fun importAIResult(text: String, provider: DirectAIProvider) {
-        if (text.isEmpty()) {
+        val cleanedText = ExternalAIAnswerCleaner.clean(text)
+        if (cleanedText.isEmpty()) {
             update { it.copy(errorMessage = "복사한 결과가 비어 있어요.") }
             return
         }
         val signature = currentDraftSignature()
-        val lines = text.split("\n")
+        val lines = cleanedText.split("\n")
         val hashtags = (lines.firstOrNull() ?: "")
             .split(" ")
             .filter { it.isNotEmpty() }
@@ -265,7 +268,7 @@ class ComposerViewModel : ViewModel() {
             caption = lines.drop(1).dropLast(1).joinToString("\n"),
             callToAction = lines.lastOrNull() ?: "",
             hashtags = hashtags,
-            composedText = text,
+            composedText = cleanedText,
             targetCharacterCount = signature.profile.controls.characterCount
         )
         val candidate = CaptionCandidate(
@@ -410,6 +413,9 @@ class ComposerViewModel : ViewModel() {
     suspend fun prepareShare(post: GeneratedPost, context: Context): Intent? {
         val version = resetVersion
         val snapshot = _state.value.mediaItems
+        if (_state.value.isPreparingShare || _state.value.isGenerating) {
+            return null
+        }
         if (snapshot.isEmpty()) {
             update {
                 it.copy(shareMessage = "사진이나 영상을 먼저 추가해 주세요.", shareMessageIsError = true)
@@ -446,6 +452,9 @@ class ComposerViewModel : ViewModel() {
         return try {
             val uris = withContext(Dispatchers.IO) { prepareShareFiles(snapshot, context) }
             if (version != resetVersion) return null
+            if (uris.isEmpty()) {
+                throw IllegalStateException("공유할 미디어 파일을 준비하지 못했어요.")
+            }
             val passes = activeValidationReport()?.passesAllRules == true
             update {
                 it.copy(
@@ -460,7 +469,7 @@ class ComposerViewModel : ViewModel() {
             update {
                 it.copy(
                     isPreparingShare = false,
-                    shareMessage = "미디어 공유를 준비하지 못했어요: ${error.localizedMessage}",
+                    shareMessage = "미디어 공유를 준비하지 못했어요: ${error.localizedMessage ?: error.javaClass.simpleName}",
                     shareMessageIsError = true
                 )
             }
@@ -486,32 +495,40 @@ class ComposerViewModel : ViewModel() {
         }
     }
 
-    private fun buildShareIntent(uris: List<Uri>, mediaItems: List<ComposerMedia>): Intent {
-        val hasVideo = mediaItems.any { it.kind == MediaKind.VIDEO }
-        val type = if (hasVideo) "*/*" else "image/*"
+    internal fun buildShareIntent(uris: List<Uri>, mediaItems: List<ComposerMedia>): Intent {
+        require(uris.isNotEmpty()) { "Cannot build share intent with empty URI list" }
+        val mimeType = MediaAttachmentPolicy.mimeTypeFor(mediaItems.map { it.kind })
         return if (uris.size == 1) {
+            val uri = uris.first()
+            val clipData = ClipData(ClipDescription(null, arrayOf(mimeType)), ClipData.Item(uri))
             Intent(Intent.ACTION_SEND).apply {
-                this.type = type
-                putExtra(Intent.EXTRA_STREAM, uris[0])
+                type = mimeType
+                putExtra(Intent.EXTRA_STREAM, uri)
+                this.clipData = clipData
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
         } else {
+            val clipData = ClipData(ClipDescription(null, arrayOf(mimeType)), ClipData.Item(uris.first()))
+            for (i in 1 until uris.size) {
+                clipData.addItem(ClipData.Item(uris[i]))
+            }
             Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                this.type = type
+                type = mimeType
                 putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+                this.clipData = clipData
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
         }
     }
 
     private fun copyToClipboard(context: Context, text: String) {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("StarManager", text))
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        clipboard?.setPrimaryClip(ClipData.newPlainText("StarManager", text))
     }
 
     fun readClipboard(context: Context): String {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        return clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString() ?: ""
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        return clipboard?.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString() ?: ""
     }
 
     fun shouldShowPasteGuidance(context: Context): Boolean {

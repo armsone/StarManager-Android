@@ -26,24 +26,27 @@ data class DraftSignature(
 enum class CaptionSource {
     DEVICE,
     DETERMINISTIC,
-    CHAT_GPT,
     GEMINI,
+    CHAT_GPT,
+    CLAUDE,
     GROK;
 
     val title: String
         get() = when (this) {
-            DEVICE -> "아이폰 AI"
-            DETERMINISTIC -> "기본 생성"
-            CHAT_GPT -> "ChatGPT"
+            DEVICE -> "기기 AI"
+            DETERMINISTIC -> "기기 AI"
             GEMINI -> "Gemini"
+            CHAT_GPT -> "ChatGPT"
+            CLAUDE -> "Claude"
             GROK -> "Grok"
         }
 }
 
 val DirectAIProvider.captionSource: CaptionSource
     get() = when (this) {
-        DirectAIProvider.OPEN_AI -> CaptionSource.CHAT_GPT
         DirectAIProvider.GEMINI -> CaptionSource.GEMINI
+        DirectAIProvider.OPEN_AI -> CaptionSource.CHAT_GPT
+        DirectAIProvider.CLAUDE -> CaptionSource.CLAUDE
         DirectAIProvider.GROK -> CaptionSource.GROK
     }
 
@@ -67,6 +70,16 @@ object MediaAttachmentPolicy {
     fun availableSlots(currentCount: Int): Int = (MAX_ITEMS - currentCount).coerceAtLeast(0)
 
     fun canShare(itemCount: Int): Boolean = itemCount in 1..MAX_ITEMS
+
+    fun mimeTypeFor(kinds: Collection<MediaKind>): String {
+        val hasImage = kinds.any { it == MediaKind.IMAGE }
+        val hasVideo = kinds.any { it == MediaKind.VIDEO }
+        return when {
+            hasImage && hasVideo -> "*/*"
+            hasVideo -> "video/*"
+            else -> "image/*"
+        }
+    }
 }
 
 class ComposerMedia(
@@ -77,17 +90,18 @@ class ComposerMedia(
     val id: String = UUID.randomUUID().toString()
 )
 
-/** 만들기 카드의 AI 선택 버튼 — AI(기기) + 외부 3사. */
+/** 만들기 카드의 AI 선택 버튼 — Gemini, ChatGPT, Claude, 기기 AI. */
 sealed class AIChoice(val id: String, val title: String) {
-    data object OnDevice : AIChoice("apple-ai", "AI")
+    data object OnDevice : AIChoice("device-ai", "기기 AI")
     data class External(val provider: DirectAIProvider) : AIChoice(provider.rawValue, provider.title)
 
     companion object {
-        val all: List<AIChoice> = listOf(
-            External(DirectAIProvider.OPEN_AI),
+        val visibleChoices: List<AIChoice> = listOf(
             External(DirectAIProvider.GEMINI),
-            External(DirectAIProvider.GROK),
+            External(DirectAIProvider.OPEN_AI),
+            External(DirectAIProvider.CLAUDE),
             OnDevice
         )
+        val all: List<AIChoice> = visibleChoices
     }
 }

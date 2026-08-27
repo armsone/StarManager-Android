@@ -1,6 +1,7 @@
 package com.armsone.starmanager
 
 import com.armsone.starmanager.ui.composer.MediaAttachmentPolicy
+import com.armsone.starmanager.ui.composer.MediaKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -21,5 +22,46 @@ class MediaAttachmentPolicyTest {
         assertTrue(MediaAttachmentPolicy.canShare(1))
         assertTrue(MediaAttachmentPolicy.canShare(8))
         assertFalse(MediaAttachmentPolicy.canShare(9))
+    }
+
+    @Test
+    fun `mime type resolves to image for image only attachments`() {
+        assertEquals("image/*", MediaAttachmentPolicy.mimeTypeFor(listOf(MediaKind.IMAGE)))
+        assertEquals(
+            "image/*",
+            MediaAttachmentPolicy.mimeTypeFor(listOf(MediaKind.IMAGE, MediaKind.IMAGE, MediaKind.IMAGE))
+        )
+    }
+
+    @Test
+    fun `mime type resolves to video for video only attachments`() {
+        assertEquals("video/*", MediaAttachmentPolicy.mimeTypeFor(listOf(MediaKind.VIDEO)))
+        assertEquals(
+            "video/*",
+            MediaAttachmentPolicy.mimeTypeFor(listOf(MediaKind.VIDEO, MediaKind.VIDEO))
+        )
+    }
+
+    @Test
+    fun `mime type generalizes to wildcard for mixed image and video attachments`() {
+        assertEquals(
+            "*/*",
+            MediaAttachmentPolicy.mimeTypeFor(listOf(MediaKind.IMAGE, MediaKind.VIDEO))
+        )
+        assertEquals(
+            "*/*",
+            MediaAttachmentPolicy.mimeTypeFor(listOf(MediaKind.VIDEO, MediaKind.IMAGE))
+        )
+        assertEquals(
+            "*/*",
+            MediaAttachmentPolicy.mimeTypeFor(
+                listOf(MediaKind.IMAGE, MediaKind.VIDEO, MediaKind.IMAGE)
+            )
+        )
+    }
+
+    @Test
+    fun `mime type fallback for empty list is image`() {
+        assertEquals("image/*", MediaAttachmentPolicy.mimeTypeFor(emptyList()))
     }
 }
