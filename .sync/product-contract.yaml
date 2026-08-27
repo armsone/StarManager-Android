@@ -375,6 +375,7 @@ capabilities:
       - "Error sanitization: strip HTML tags, script/style, URLs, tokens/secrets, stack traces; concise max 80 chars"
       - "Fallback detection: OAuth/login redirects, Cloudflare/CAPTCHA challenges, or unsubmitted/missing input"
       - "Keyboard focus dismissal: clearFocus(force = true) and hide keyboard on non-empty import only"
+      - "Composer scroll keyboard dismissal: on the first non-zero vertical NestedScrollSource.UserInput delta, clearFocus(force = true) and hide the software keyboard; tapping the story input can acquire focus again normally"
     data_contracts:
       AIChoice:
         External: "Gemini, ChatGPT, Claude"
@@ -399,6 +400,7 @@ capabilities:
       - "Provider buttons stay static and dimmed during generation; single rotating spinner in status card"
       - "Preview card remains still with empty placeholder until result arrives"
       - "Cancel button in status card for safe cancellation"
+      - "User-driven scrolling anywhere in the Composer dismisses input focus and the software keyboard without consuming the scroll gesture"
     supported_devices_layouts:
       - "Single horizontal row for normal text scale, 2x2 grid for large text scale (>=1.3x)"
       - "Compact and regular two-column composer layouts"
@@ -436,6 +438,7 @@ capabilities:
       - "composer_external_ai_single_spinner_and_static_preview"
       - "settings_external_ai_browser_visibility"
       - "composer_external_ai_success_keyboard_focus"
+      - "composer_scroll_keyboard_dismissal"
       - "external_ai_answer_cleaner_parity"
 
   - id: "compact_generation_prompt"

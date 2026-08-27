@@ -544,6 +544,33 @@
       "reopen_history": []
     },
     {
+      "id": "composer_scroll_keyboard_dismissal",
+      "route_state": "composer_editing",
+      "element": "scroll_container",
+      "dimension": "interaction",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "When the user starts scrolling the Composer, immediately dismiss input focus and the software keyboard; a later explicit tap on the story input restores normal focus and keyboard behavior",
+        "location": "StarManager/Features/Composer/ComposerView.swift"
+      },
+      "target_observation": "The root Composer vertical scroll observes non-zero user-input nested-scroll deltas, calls clearFocus(force=true) and hide(), returns Offset.Zero so scrolling continues, and does not disable later BasicTextField focus acquisition.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-28",
+          "action": "Attached a NestedScrollConnection to the full Composer scroll container and dismisses focus/keyboard only for non-zero NestedScrollSource.UserInput vertical movement while preserving the existing successful-import dismissal",
+          "result": "implemented in source; static integrity checked; runtime keyboard and focus verification pending"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
       "id": "composer_external_ai_success_keyboard_focus",
       "route_state": "composer_completed",
       "element": "input",

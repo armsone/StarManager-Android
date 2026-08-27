@@ -97,6 +97,12 @@
 
 정적 점검 중 `:app:compileDebugKotlin`을 한 차례 실행했으나 `ComposerScreen.kt`의 `ExternalAISurface` 및 `ExternalAISurfaceMode` 임포트 누락으로 실패했다. 누락 임포트는 즉시 보완했다. 후속 지시의 검증 분리 범위에 맞춰 수정 후 컴파일과 테스트는 다시 실행하지 않았으므로, 최종 상태는 계속 `implemented_source_only`이며 빌드·런타임·시각 검증을 주장하지 않는다.
 
+## 후속 변경 — Composer 스크롤 시 키보드 숨김
+
+Composer 최상위 세로 스크롤 컨테이너에 `NestedScrollConnection`을 연결했다. 사용자의 실제 세로 스크롤 입력(`NestedScrollSource.UserInput`)에서 첫 non-zero 이동량이 들어오면 `FocusManager.clearFocus(force = true)`와 `SoftwareKeyboardController.hide()`를 즉시 호출한다. 연결은 `Offset.Zero`를 반환하므로 스크롤 입력을 소비하지 않으며, 이후 사용자가 이야기 입력창을 다시 탭하면 `BasicTextField`가 평소대로 포커스를 얻어 키보드를 다시 표시할 수 있다. 결과 가져오기 성공 시 `lastImportSuccessToken`으로 강제 숨기는 기존 경로도 그대로 유지했다.
+
+이 후속 변경은 `git diff --check`, 패리티 JSON 파싱, 제품 계약 YAML 파싱으로만 정적 확인했다. 빌드·테스트·실기기 키보드 동작 검증은 수행하지 않았으며 `composer_scroll_keyboard_dismissal` 원장 행을 `implemented_source_only`로 추가했다.
+
 ## 팀장 최종 후보 검증
 
 - 종료: 2026-08-28 00:58 KST
