@@ -366,6 +366,109 @@ object ExternalAIScripts {
         }
     }
 
+    /** 제공사 화면에 표시된 오류 요소(에러 배너, 경고 메시지 등)를 감지하는 스크립트 */
+    fun extractErrorScript(): String {
+        return """
+            (function() {
+                try {
+                    var errorSelectors = [
+                        '[data-testid="error-message"]',
+                        '[data-testid="error-banner"]',
+                        'div[role="alert"]',
+                        'div.error-message',
+                        'div.text-red-500',
+                        'p.text-red-500',
+                        'div[class*="error-message"]',
+                        'div[class*="ErrorMessage"]',
+                        'div[class*="danger"]',
+                        '.alert-danger',
+                        'div.snack-bar'
+                    ];
+                    for (var i = 0; i < errorSelectors.length; i++) {
+                        var el = document.querySelector(errorSelectors[i]);
+                        if (el && (el.offsetWidth > 0 || el.offsetHeight > 0)) {
+                            var text = (el.innerText || el.textContent || '').trim();
+                            if (text.length > 0) {
+                                return JSON.stringify({ hasError: true, error: text });
+                            }
+                        }
+                    }
+                    return JSON.stringify({ hasError: false, error: null });
+                } catch (e) {
+                    return JSON.stringify({ hasError: false, error: null });
+                }
+            })();
+        """.trimIndent()
+    }
+
+    /** evaluateJavascript의 오류 감지 반환값을 안전하게 파싱 */
+    fun parseErrorResult(rawResult: String?): ExternalAIDomErrorResult {
+        if (rawResult == null || rawResult == "null" || rawResult.isBlank()) {
+            return ExternalAIDomErrorResult(hasError = false, error = null)
+        }
+        return try {
+            val element = parseJsonElement(rawResult)
+                ?: return ExternalAIDomErrorResult(hasError = false, error = null)
+            if (element.isJsonObject) {
+                val obj = element.asJsonObject
+                ExternalAIDomErrorResult(
+                    hasError = obj.optBoolean("hasError", false),
+                    error = obj.optNullableString("error")
+                )
+            } else {
+                ExternalAIDomErrorResult(hasError = false, error = null)
+            }
+        } catch (_: Exception) {
+            ExternalAIDomErrorResult(hasError = false, error = null)
+        }
+    }
+
+    /** 로그인 또는 보안 캡차 챌린지 감지 스크립트 */
+    fun checkChallengeScript(): String {
+        return """
+            (function() {
+                try {
+                    var challengeSelectors = [
+                        '#cf-challenge-running',
+                        '#challenge-stage',
+                        'div.cf-turnstile',
+                        'iframe[src*="cloudflare"]',
+                        'iframe[src*="recaptcha"]',
+                        'div.g-recaptcha',
+                        'a[href*="/login"]',
+                        'button[data-testid="login-button"]'
+                    ];
+                    for (var i = 0; i < challengeSelectors.length; i++) {
+                        var el = document.querySelector(challengeSelectors[i]);
+                        if (el && (el.offsetWidth > 0 || el.offsetHeight > 0)) {
+                            return JSON.stringify({ hasChallenge: true });
+                        }
+                    }
+                    return JSON.stringify({ hasChallenge: false });
+                } catch (e) {
+                    return JSON.stringify({ hasChallenge: false });
+                }
+            })();
+        """.trimIndent()
+    }
+
+    /** evaluateJavascript의 챌린지 감지 반환값을 파싱 */
+    fun parseChallengeResult(rawResult: String?): Boolean {
+        if (rawResult == null || rawResult == "null" || rawResult.isBlank()) {
+            return false
+        }
+        return try {
+            val element = parseJsonElement(rawResult) ?: return false
+            if (element.isJsonObject) {
+                element.asJsonObject.optBoolean("hasChallenge", false)
+            } else {
+                false
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     /** evaluateJavascript의 폴링 반환값을 안전하게 파싱 */
     fun parsePollResult(rawResult: String?): ExternalAIPollResult {
         if (rawResult == null || rawResult == "null" || rawResult.isBlank()) {

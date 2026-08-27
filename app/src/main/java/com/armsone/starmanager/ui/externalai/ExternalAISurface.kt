@@ -76,20 +76,27 @@ fun ExternalAISurface(
     provider: DirectAIProvider,
     mode: ExternalAISurfaceMode,
     prompt: String = "",
+    fallbackReason: ExternalAIFallbackReason? = null,
     onClose: () -> Unit,
     onImport: (String) -> Unit = {},
+    onSubmitted: () -> Unit = {},
+    onError: (String?) -> Unit = {},
+    autoImportOnComplete: Boolean = false,
     appearance: AppAppearance = LocalAppAppearance.current
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
-    var currentStatus by remember {
-        mutableStateOf(if (mode.isLogin) ExternalAIStatus.CONNECTING else ExternalAIStatus.CONNECTING)
-    }
+    var currentStatus by remember { mutableStateOf(ExternalAIStatus.CONNECTING) }
+    var detectedFallbackReason by remember { mutableStateOf<ExternalAIFallbackReason?>(null) }
+    // 사유 배너는 페이지 로드/자동화 상태 변경과 무관하게 사용자가 보는 동안 유지된다.
+    val reasonBanner = (fallbackReason ?: detectedFallbackReason)?.bannerText
     var statusDetail by remember { mutableStateOf<String?>(null) }
     var pageProgress by remember { mutableFloatStateOf(0f) }
     var extractedAnswer by remember { mutableStateOf<String?>(null) }
     var isPollingAnswer by remember { mutableStateOf(false) }
+    var elapsedSeconds by remember { mutableStateOf(0L) }
+    var hasImportedAnswer by remember { mutableStateOf(false) }
     var stabilityState by remember { mutableStateOf(ExternalAIStabilityState()) }
 
     fun copyPromptToClipboard() {
@@ -105,6 +112,8 @@ fun ExternalAISurface(
         stabilityState = stabilityState.reset()
         extractedAnswer = null
         isPollingAnswer = false
+        elapsedSeconds = 0L
+        hasImportedAnswer = false
         currentStatus = ExternalAIStatus.WAITING_FOR_INPUT
         statusDetail = "입력창을 찾아 요청문을 입력하는 중…"
 
@@ -112,41 +121,72 @@ fun ExternalAISurface(
         wv.evaluateJavascript(script) { result ->
             val injection = ExternalAIScripts.parseInjectionResult(result)
             if (!injection.inputFound) {
+                detectedFallbackReason = ExternalAIFallbackReason.MANUAL_INPUT_REQUIRED
                 currentStatus = ExternalAIStatus.WAITING_FOR_INPUT
                 statusDetail = "입력창을 찾는 중입니다. [다시 넣기]를 눌러보세요."
                 isPollingAnswer = false
             } else if (!injection.submitted) {
+                detectedFallbackReason = ExternalAIFallbackReason.MANUAL_CONFIRMATION
                 currentStatus = ExternalAIStatus.INPUT_READY
                 statusDetail = "자동 전송에 실패했습니다. 화면의 전송(Send) 버튼을 직접 눌러주세요."
                 isPollingAnswer = false
             } else {
+                if (fallbackReason == null) detectedFallbackReason = null
                 currentStatus = ExternalAIStatus.GENERATING
-                statusDetail = "요청문이 전송되었어요. 답변 생성을 기다리는 중…"
+                statusDetail = "정보를 보냈어요 · ${ExternalAITimerFormatter.formatWaitingStatus(0L)}"
                 isPollingAnswer = true
+                onSubmitted()
             }
         }
     }
 
     fun pollForAnswer(wv: WebView) {
         if (mode.isLogin) return
-        val script = ExternalAIScripts.extractAnswerScript(provider)
-        wv.evaluateJavascript(script) { result ->
-            val pollResult = ExternalAIScripts.parsePollResult(result)
-            val nextStability = ExternalAIStabilityReducer.step(stabilityState, pollResult)
-            stabilityState = nextStability
-
-            if (pollResult.generating) {
-                currentStatus = ExternalAIStatus.GENERATING
-                statusDetail = "답변 생성 중…"
-            } else if (nextStability.isStable && nextStability.stableAnswer != null) {
-                val stableText = nextStability.stableAnswer
-                extractedAnswer = stableText
-                currentStatus = ExternalAIStatus.COMPLETED
-                statusDetail = "답변 생성 완료 (${stableText.length}자)"
+        wv.evaluateJavascript(ExternalAIScripts.extractErrorScript()) { errorResult ->
+            val domError = ExternalAIScripts.parseErrorResult(errorResult)
+            if (domError.hasError && !domError.error.isNullOrBlank()) {
+                val sanitized = ExternalAIErrorSanitizer.sanitize(domError.error)
+                currentStatus = ExternalAIStatus.ERROR
+                statusDetail = sanitized
                 isPollingAnswer = false
-            } else if (pollResult.newAnswer && pollResult.text.isNotBlank()) {
-                currentStatus = ExternalAIStatus.GENERATING
-                statusDetail = "답변 수신 중… (${nextStability.consecutiveMatches}/${ExternalAIStabilityState.REQUIRED_STABLE_POLLS})"
+                onError(sanitized)
+            } else {
+                val script = ExternalAIScripts.extractAnswerScript(provider)
+                wv.evaluateJavascript(script) { result ->
+                    val pollResult = ExternalAIScripts.parsePollResult(result)
+                    val nextStability = ExternalAIStabilityReducer.step(stabilityState, pollResult)
+                    stabilityState = nextStability
+
+                    if (pollResult.generating) {
+                        currentStatus = ExternalAIStatus.GENERATING
+                        statusDetail = "정보를 보냈어요 · ${ExternalAITimerFormatter.formatWaitingStatus(elapsedSeconds)}"
+                    } else if (nextStability.isStable && nextStability.stableAnswer != null) {
+                        val stableText = nextStability.stableAnswer
+                        extractedAnswer = stableText
+                        currentStatus = ExternalAIStatus.COMPLETED
+                        statusDetail = "답변 생성 완료 (${stableText.length}자)"
+                        isPollingAnswer = false
+                        if (autoImportOnComplete && !hasImportedAnswer) {
+                            hasImportedAnswer = true
+                            onImport(stableText)
+                        }
+                    } else if (pollResult.newAnswer && pollResult.text.isNotBlank()) {
+                        currentStatus = ExternalAIStatus.GENERATING
+                        statusDetail = "정보를 보냈어요 · ${ExternalAITimerFormatter.formatWaitingStatus(elapsedSeconds)}"
+                    }
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(isPollingAnswer) {
+        if (isPollingAnswer) {
+            elapsedSeconds = 0L
+            while (isPollingAnswer) {
+                delay(1000L)
+                if (!isPollingAnswer) break
+                elapsedSeconds += 1L
+                statusDetail = "정보를 보냈어요 · ${ExternalAITimerFormatter.formatWaitingStatus(elapsedSeconds)}"
             }
         }
     }
@@ -158,6 +198,11 @@ fun ExternalAISurface(
                 delay(2000)
                 if (!isPollingAnswer) break
                 webViewRef?.let { pollForAnswer(it) }
+            }
+            if (isPollingAnswer) {
+                isPollingAnswer = false
+                currentStatus = ExternalAIStatus.ERROR
+                statusDetail = "응답 대기 시간이 초과되었어요. [다시 넣기]를 눌러보세요."
             }
         }
     }
@@ -253,6 +298,27 @@ fun ExternalAISurface(
                 HorizontalDivider(color = BrandTheme.divider(appearance))
             }
 
+            // 폴백 사유 배너 (로그인/보안 확인/수동 입력 등) — 자동화 상태와 무관하게 유지
+            AnimatedVisibility(visible = reasonBanner != null) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(BrandTheme.red.copy(alpha = 0.1f))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        reasonBanner ?: "",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = BrandTheme.labelPrimary(appearance),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("externalai.fallbackBanner")
+                    )
+                }
+            }
+
             // 안내/상태 바 (생성 모드 또는 복사 알림 시)
             AnimatedVisibility(visible = statusDetail != null || extractedAnswer != null) {
                 Row(
@@ -330,10 +396,13 @@ fun ExternalAISurface(
                                     request: WebResourceRequest?
                                 ): Boolean {
                                     val targetUrl = request?.url?.toString()
-                                    if (ExternalAISecurityPolicy.isAllowedUrl(targetUrl, provider)) {
-                                        return false
+                                    if (!ExternalAISecurityPolicy.isAllowedUrl(targetUrl, provider)) {
+                                        return true
                                     }
-                                    return true
+                                    ExternalAIFallbackClassifier.classifyUrl(targetUrl)?.let {
+                                        detectedFallbackReason = it
+                                    }
+                                    return false
                                 }
 
                                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -350,11 +419,36 @@ fun ExternalAISurface(
                                     cookieManager.flush()
                                     extractedAnswer = null
                                     stabilityState = stabilityState.reset()
-                                    if (!mode.isLogin && prompt.isNotBlank()) {
-                                        scope.launch {
-                                            delay(1200)
-                                            view?.let { executePromptInjection(it) }
+                                    val pageFallback = ExternalAIFallbackClassifier.classifyUrl(url)
+                                    if (pageFallback != null) {
+                                        detectedFallbackReason = pageFallback
+                                    } else if (!mode.isLogin && prompt.isNotBlank()) {
+                                        view?.evaluateJavascript(ExternalAIScripts.checkChallengeScript()) { result ->
+                                            if (ExternalAIScripts.parseChallengeResult(result)) {
+                                                detectedFallbackReason = ExternalAIFallbackReason.SECURITY_VERIFICATION
+                                            } else {
+                                                scope.launch {
+                                                    delay(1200)
+                                                    executePromptInjection(view)
+                                                }
+                                            }
                                         }
+                                    }
+                                }
+
+                                override fun onReceivedError(
+                                    view: WebView?,
+                                    errorCode: Int,
+                                    description: String?,
+                                    failingUrl: String?
+                                ) {
+                                    super.onReceivedError(view, errorCode, description, failingUrl)
+                                    if (failingUrl == provider.url) {
+                                        val sanitized = ExternalAIErrorSanitizer.sanitize(description)
+                                        currentStatus = ExternalAIStatus.ERROR
+                                        statusDetail = sanitized
+                                        isPollingAnswer = false
+                                        onError(sanitized)
                                     }
                                 }
                             }

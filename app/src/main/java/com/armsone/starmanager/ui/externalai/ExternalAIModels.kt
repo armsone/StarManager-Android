@@ -17,10 +17,35 @@ enum class ExternalAIStatus(val message: String) {
     ERROR("확인 필요")
 }
 
+/** 백그라운드 브라우저 자동화 단계 */
+enum class ExternalAIAutomationPhase {
+    IDLE,
+    CONNECTING,
+    SUBMITTED,
+    WAITING_ELAPSED,
+    COMPLETED,
+    FALLBACK_REQUIRED,
+    ERROR
+}
+
+/** 대화형 웹뷰 폴백 사유 및 사용자 안내 배너 문구 */
+enum class ExternalAIFallbackReason(val bannerText: String) {
+    LOGIN_REQUIRED("로그인이 필요해요"),
+    SECURITY_VERIFICATION("보안 확인이 필요해요"),
+    MANUAL_INPUT_REQUIRED("입력창을 확인해 주세요"),
+    MANUAL_CONFIRMATION("직접 확인이 필요해요")
+}
+
+data class ExternalAIDomErrorResult(
+    val hasError: Boolean,
+    val error: String? = null
+)
+
 data class ExternalAIInjectionResult(
     val success: Boolean,
     val inputFound: Boolean,
     val submitted: Boolean,
+    val isAuthChallenge: Boolean = false,
     val error: String? = null
 )
 

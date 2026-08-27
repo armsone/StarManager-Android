@@ -44,6 +44,21 @@ class CreatorProfileStoreTest {
     }
 
     @Test
+    fun `브라우저 보기는 기본으로 꺼져 있고 선택하면 영속화된다`() {
+        val storage = InMemoryKeyValueStore()
+        val store = CreatorProfileStore(storage)
+        assertFalse(store.showsExternalAIBrowser.value)
+
+        store.setShowsExternalAIBrowser(true)
+        assertTrue(store.showsExternalAIBrowser.value)
+        assertEquals(1, storage.getInt(CreatorProfileStore.SHOW_EXTERNAL_AI_BROWSER_STORAGE_KEY, 0))
+        assertTrue(CreatorProfileStore(storage).showsExternalAIBrowser.value)
+
+        store.setShowsExternalAIBrowser(false)
+        assertFalse(CreatorProfileStore(storage).showsExternalAIBrowser.value)
+    }
+
+    @Test
     fun `분위기와 이야기 비중 설정이 영속화된다`() {
         val storage = InMemoryKeyValueStore()
         val store = CreatorProfileStore(storage)

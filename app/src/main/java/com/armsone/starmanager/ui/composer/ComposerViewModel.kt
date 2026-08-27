@@ -23,9 +23,14 @@ import com.armsone.starmanager.service.DeterministicCaptionGenerator
 import com.armsone.starmanager.service.DirectAIProvider
 import com.armsone.starmanager.service.ExternalPromptBuilder
 import com.armsone.starmanager.ui.externalai.ExternalAIAnswerCleaner
+import com.armsone.starmanager.ui.externalai.ExternalAIAutomationPhase
+import com.armsone.starmanager.ui.externalai.ExternalAIErrorSanitizer
+import com.armsone.starmanager.ui.externalai.ExternalAIFallbackReason
+import com.armsone.starmanager.ui.externalai.ExternalAITimerFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,7 +55,16 @@ data class ComposerUiState(
     val generatedSignature: DraftSignature? = null,
     val activeCaptionSource: CaptionSource? = null,
     val captionCandidates: Map<CaptionSource, CaptionCandidate> = emptyMap(),
-    val pendingExternalProvider: DirectAIProvider? = null
+    val pendingExternalProvider: DirectAIProvider? = null,
+    val activeAutomationProvider: DirectAIProvider? = null,
+    val automationPhase: ExternalAIAutomationPhase = ExternalAIAutomationPhase.IDLE,
+    val automationElapsedSeconds: Long = 0L,
+    val automationStepTitle: String? = null,
+    val automationStepSubtitle: String? = null,
+    val fallbackReason: ExternalAIFallbackReason? = null,
+    val isFallbackBrowserVisible: Boolean = false,
+    val lastImportSuccessToken: Long = 0L,
+    val automationRequestId: Int = 0
 )
 
 class ComposerViewModel : ViewModel() {
@@ -60,6 +74,7 @@ class ComposerViewModel : ViewModel() {
     private val _state = MutableStateFlow(ComposerUiState())
     val state: StateFlow<ComposerUiState> = _state.asStateFlow()
     private var generationJob: Job? = null
+    private var timerJob: Job? = null
     private var mediaLoadJob: Job? = null
     private var resetVersion = 0
 
@@ -77,12 +92,13 @@ class ComposerViewModel : ViewModel() {
     val trimmedIdea: String get() = _state.value.idea.trim()
 
     fun hasContent(): Boolean = _state.value.run {
-        idea.isNotEmpty() || generatedPost != null || mediaItems.isNotEmpty() || captionCandidates.isNotEmpty() || pendingExternalProvider != null
+        idea.isNotEmpty() || generatedPost != null || mediaItems.isNotEmpty() || captionCandidates.isNotEmpty() || pendingExternalProvider != null || isGenerating
     }
 
     fun resetComposer() {
         resetVersion += 1
         generationJob?.cancel()
+        timerJob?.cancel()
         mediaLoadJob?.cancel()
         update { state ->
             state.copy(
@@ -99,7 +115,35 @@ class ComposerViewModel : ViewModel() {
                 generatedSignature = null,
                 activeCaptionSource = null,
                 captionCandidates = emptyMap(),
-                pendingExternalProvider = null
+                pendingExternalProvider = null,
+                activeAutomationProvider = null,
+                automationPhase = ExternalAIAutomationPhase.IDLE,
+                automationElapsedSeconds = 0L,
+                automationStepTitle = null,
+                automationStepSubtitle = null,
+                fallbackReason = null,
+                isFallbackBrowserVisible = false,
+                lastImportSuccessToken = 0L,
+                automationRequestId = state.automationRequestId + 1
+            )
+        }
+    }
+
+    fun cancelGeneration() {
+        generationJob?.cancel()
+        timerJob?.cancel()
+        update { state ->
+            state.copy(
+                isGenerating = false,
+                activeAutomationProvider = null,
+                automationPhase = ExternalAIAutomationPhase.IDLE,
+                automationElapsedSeconds = 0L,
+                automationStepTitle = null,
+                automationStepSubtitle = null,
+                fallbackReason = null,
+                isFallbackBrowserVisible = false,
+                statusMessage = "생성 취소됨",
+                automationRequestId = state.automationRequestId + 1
             )
         }
     }
@@ -164,10 +208,19 @@ class ComposerViewModel : ViewModel() {
     // MARK: - 생성
 
     fun generateDraft() {
-        if (trimmedIdea.isEmpty()) return
+        if (trimmedIdea.isEmpty() || _state.value.isGenerating) return
+        timerJob?.cancel()
+        generationJob?.cancel()
         update {
             it.copy(
                 isGenerating = true,
+                activeAutomationProvider = null,
+                automationPhase = ExternalAIAutomationPhase.CONNECTING,
+                automationElapsedSeconds = 0L,
+                automationStepTitle = "기기 AI로 만드는 중…",
+                automationStepSubtitle = "잠시만 기다려 주세요",
+                fallbackReason = null,
+                isFallbackBrowserVisible = false,
                 errorMessage = null,
                 statusMessage = null,
                 shareMessage = null,
@@ -177,7 +230,6 @@ class ComposerViewModel : ViewModel() {
                 activeCaptionSource = null
             )
         }
-        generationJob?.cancel()
         generationJob = viewModelScope.launch {
             try {
                 val profile = profileStore.profile.value
@@ -200,7 +252,9 @@ class ComposerViewModel : ViewModel() {
                         generatedSignature = signature,
                         activeCaptionSource = candidate.source,
                         statusMessage = if (validationReport(candidate).passesAllRules) "완료" else "확인 필요",
-                        isGenerating = false
+                        isGenerating = false,
+                        automationPhase = ExternalAIAutomationPhase.COMPLETED,
+                        lastImportSuccessToken = System.currentTimeMillis()
                     )
                 }
             } catch (_: CancellationException) {
@@ -209,14 +263,107 @@ class ComposerViewModel : ViewModel() {
                 update {
                     it.copy(
                         errorMessage = error.localizedMessage ?: "게시물을 만들지 못했어요.",
-                        isGenerating = false
+                        isGenerating = false,
+                        automationPhase = ExternalAIAutomationPhase.ERROR
                     )
                 }
             }
         }
     }
 
-    // MARK: - 외부 AI 프롬프트 공유/가져오기
+    // MARK: - 외부 AI 백그라운드 자동화 / 공유 / 가져오기
+
+    fun startExternalAIGeneration(provider: DirectAIProvider) {
+        if (trimmedIdea.isEmpty() || _state.value.isGenerating) return
+        timerJob?.cancel()
+        generationJob?.cancel()
+        update { state ->
+            state.copy(
+                isGenerating = true,
+                activeAutomationProvider = provider,
+                automationPhase = ExternalAIAutomationPhase.CONNECTING,
+                automationElapsedSeconds = 0L,
+                automationStepTitle = "${provider.title}에 연결하는 중…",
+                automationStepSubtitle = "입력창을 준비하고 있어요",
+                fallbackReason = null,
+                isFallbackBrowserVisible = false,
+                errorMessage = null,
+                statusMessage = null,
+                shareMessage = null,
+                shareMessageIsError = false,
+                generatedPost = null,
+                generatedSignature = null,
+                activeCaptionSource = null,
+                pendingExternalProvider = null,
+                automationRequestId = state.automationRequestId + 1
+            )
+        }
+    }
+
+    fun onAutomationSubmitted() {
+        timerJob?.cancel()
+        update { state ->
+            state.copy(
+                automationPhase = ExternalAIAutomationPhase.SUBMITTED,
+                automationElapsedSeconds = 0L,
+                automationStepTitle = "정보를 보냈어요",
+                automationStepSubtitle = ExternalAITimerFormatter.formatWaitingStatus(0L)
+            )
+        }
+        timerJob = viewModelScope.launch {
+            var elapsed = 0L
+            while (true) {
+                delay(1000L)
+                elapsed += 1L
+                update { s ->
+                    if (!s.isGenerating || s.automationPhase == ExternalAIAutomationPhase.COMPLETED) {
+                        s
+                    } else {
+                        s.copy(
+                            automationPhase = ExternalAIAutomationPhase.WAITING_ELAPSED,
+                            automationElapsedSeconds = elapsed,
+                            automationStepTitle = "정보를 보냈어요",
+                            automationStepSubtitle = ExternalAITimerFormatter.formatWaitingStatus(elapsed)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun onAutomationFallbackRequired(reason: ExternalAIFallbackReason) {
+        update {
+            it.copy(
+                isFallbackBrowserVisible = true,
+                fallbackReason = reason,
+                automationPhase = ExternalAIAutomationPhase.FALLBACK_REQUIRED
+            )
+        }
+    }
+
+    fun dismissFallbackBrowser() {
+        update {
+            it.copy(
+                isFallbackBrowserVisible = false,
+                fallbackReason = null
+            )
+        }
+    }
+
+    fun onAutomationError(rawError: String?) {
+        timerJob?.cancel()
+        val sanitized = ExternalAIErrorSanitizer.sanitize(rawError)
+        update {
+            it.copy(
+                isGenerating = false,
+                activeAutomationProvider = null,
+                automationPhase = ExternalAIAutomationPhase.ERROR,
+                errorMessage = sanitized,
+                fallbackReason = null,
+                isFallbackBrowserVisible = false
+            )
+        }
+    }
 
     fun externalPrompt(): String {
         val profile = profileStore.profile.value
@@ -256,6 +403,7 @@ class ComposerViewModel : ViewModel() {
             update { it.copy(errorMessage = "복사한 결과가 비어 있어요.") }
             return
         }
+        timerJob?.cancel()
         val signature = currentDraftSignature()
         val lines = cleanedText.split("\n")
         val hashtags = (lines.firstOrNull() ?: "")
@@ -276,19 +424,25 @@ class ComposerViewModel : ViewModel() {
             post = post,
             signature = signature
         )
-        update { it.copy(captionCandidates = it.captionCandidates + (candidate.source to candidate)) }
-        useCandidate(candidate)
         update {
             it.copy(
+                captionCandidates = it.captionCandidates + (candidate.source to candidate),
+                isGenerating = false,
+                activeAutomationProvider = null,
+                automationPhase = ExternalAIAutomationPhase.COMPLETED,
+                fallbackReason = null,
+                isFallbackBrowserVisible = false,
                 pendingExternalProvider = null,
                 errorMessage = null,
                 statusMessage = if (validationReport(candidate).passesAllRules) {
                     "${provider.title} 결과 가져옴"
                 } else {
                     "가져옴 · 기준 확인 필요"
-                }
+                },
+                lastImportSuccessToken = System.currentTimeMillis()
             )
         }
+        useCandidate(candidate)
     }
 
     fun useCandidate(candidate: CaptionCandidate) {

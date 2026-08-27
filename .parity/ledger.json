@@ -307,6 +307,33 @@
       "reopen_history": []
     },
     {
+      "id": "settings_external_ai_browser_visibility",
+      "route_state": "settings_external_ai",
+      "element": "toggle",
+      "dimension": "behavior",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "A persisted Browser View toggle defaults OFF; OFF keeps background browser automation while ON reveals the in-app browser from request start without changing status, error, fallback, automatic import, or keyboard-dismiss behavior",
+        "location": "StarManager/Features/Settings/ProfileSettingsView.swift"
+      },
+      "target_observation": "Settings shows 브라우저 보기 as an OFF-by-default switch. The choice survives relaunch and selects hidden or visible WebView presentation without changing the external AI automation result contract.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/model/CreatorProfileStore.kt",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": true,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-28",
+          "action": "Added an OFF-by-default persisted showsExternalAIBrowser setting, settings switch, and conditional hidden/visible WebView automation with shared status, sanitized error, fallback, automatic import, and keyboard-dismiss flow",
+          "result": "implemented in source; persistence test authored; final compilation, test execution, and runtime verification pending"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
       "id": "composer_external_ai_in_app_browser",
       "route_state": "composer_initial",
       "element": "browser",
@@ -320,7 +347,7 @@
       "target_observation": "Direct full-screen in-app WebView without share chooser or confirm dialog, automating prompt fill and submit, with response observation, result cleaning, and fallback actions",
       "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAISurface.kt:56",
       "fixture": "catalog-v1/all",
-      "fallback_capable": false,
+      "fallback_capable": true,
       "evidence": [],
       "status": "implemented_source_only",
       "attempts": [
@@ -335,6 +362,210 @@
           "date": "2026-08-27",
           "action": "Added old-answer baseline protection, confirmed-submit gating, and three stable non-streaming poll requirement; ran unit tests, build, and lint",
           "result": "Source and deterministic tests passed; live prompt fill, submit, stable extraction, and import remain pending"
+        },
+        {
+          "attempt": 3,
+          "date": "2026-08-28",
+          "action": "Refactored ExternalAISurface into an interactive fallback surface with reason banners (login, security/CAPTCHA, manual input/confirmation) while headless automation handles normal generation",
+          "result": "implemented in source; runtime verification pending"
+        },
+        {
+          "attempt": 4,
+          "date": "2026-08-28",
+          "action": "Continued a Gemini-timed-out draft: fixed fallback reason banner being wiped on page load by separating it from transient status text, initialized status without a redundant duplicate branch, and added an explicit timeout status after 60 unanswered polls",
+          "result": "implemented in source; still uncompiled/unbuilt, runtime verification pending"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
+      "id": "composer_external_ai_background_browser_lifecycle",
+      "route_state": "composer_generating",
+      "element": "webview",
+      "dimension": "integration",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "Retained internal web browser running invisibly on Composer screen, automating prompt submit, polling, streaming protection, and clean cancel destruction",
+        "location": "StarManager/Features/Composer/ComposerView.swift"
+      },
+      "target_observation": "Attached headless AndroidView WebView with realistic viewport, prompt injection, confirmed submission, DOM polling, streaming protection, and fresh per-request automation state with persistent cookie session",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": true,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-28",
+          "action": "Implemented HiddenExternalAIWebView with attached lifecycle, zero layout impact, realistic viewport, fresh per-request automation state, and clean teardown on cancel/reset",
+          "result": "implemented in source; runtime verification pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-28",
+          "action": "Continued a Gemini-timed-out draft: serialized the per-tick DOM error and answer extraction evaluateJavascript calls (previously fired concurrently, risking duplicate onError/onSuccess terminal events in the same poll tick) and closed a race where rapid onPageFinished re-entry could submit the prompt twice before the first attempt's callback returned",
+          "result": "implemented in source; still uncompiled/unbuilt, runtime verification pending"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
+      "id": "composer_external_ai_status_and_elapsed_timer",
+      "route_state": "composer_generating",
+      "element": "card",
+      "dimension": "behavior",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "Status progression: connecting ({provider}에 연결하는 중… / 입력창을 준비하고 있어요), prompt submitted (정보를 보냈어요 + 답변을 기다리는 중 (00초)), live elapsed timer (01초 ... 1분 00초)",
+        "location": "StarManager/Features/Composer/ComposerView.swift"
+      },
+      "target_observation": "Deterministic state transitions: connecting -> submitted timestamp -> waiting with live ticking seconds formatted as '00초' ... '1분 00초'",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAITimerFormatter.kt",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-28",
+          "action": "Implemented ExternalAITimerFormatter and live elapsed seconds ticker in ComposerViewModel with unit test coverage",
+          "result": "implemented in source; runtime verification pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-28",
+          "action": "Authored deterministic JVM tests for ExternalAITimerFormatter (sub-60s, minute rollover, negative clamp, waiting-status wrapper) after resuming a Gemini-timed-out draft that had left the formatter untested",
+          "result": "Tests authored (ExternalAIDraftUtilsTest.kt); not executed in this environment (no build/test execution permitted)"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
+      "id": "composer_external_ai_error_relay_and_sanitization",
+      "route_state": "composer_error",
+      "element": "card",
+      "dimension": "data_flow",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "Detect provider-visible site errors while waiting, sanitize them (no raw HTML/script/stack trace/token/key/password/URL; max ~80 chars), relay useful message on Composer, end generation cleanly",
+        "location": "StarManager/Features/Composer/ComposerView.swift"
+      },
+      "target_observation": "DOM error observer and ExternalAIErrorSanitizer stripping HTML tags, scripts, URLs, tokens, and stack traces with <=80 character limit relayed to Composer",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAIErrorSanitizer.kt",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-28",
+          "action": "Implemented ExternalAIErrorSanitizer and DOM error observer script with deterministic JVM sanitization test suite",
+          "result": "implemented in source; runtime verification pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-28",
+          "action": "Authored deterministic JVM tests for ExternalAIErrorSanitizer (HTML/script stripping, URL/token/secret masking, stack trace removal, default fallback message, max-length truncation, common prefix removal) after resuming a Gemini-timed-out draft that had left the sanitizer untested",
+          "result": "Tests authored (ExternalAIDraftUtilsTest.kt); not executed in this environment (no build/test execution permitted)"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
+      "id": "composer_external_ai_visible_fallback",
+      "route_state": "composer_fallback",
+      "element": "surface",
+      "dimension": "interaction",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "Reveal in-app browser only when user interaction required (login, security/CAPTCHA, manual input/confirmation) with short reason banner and seamless import",
+        "location": "StarManager/Features/Composer/ComposerView.swift"
+      },
+      "target_observation": "ExternalAIFallbackClassifier identifying login, security/CAPTCHA, or manual input triggers and presenting in-app browser with short reason banner",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAIFallbackClassifier.kt",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": true,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-28",
+          "action": "Implemented fallback reason classifier, banner display in ExternalAISurface, and seamless result handoff back to Composer",
+          "result": "implemented in source; runtime verification pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-28",
+          "action": "Continued a Gemini-timed-out draft: fixed the reason banner (e.g. '로그인이 필요해요') being cleared the instant the fallback WebView started loading, by hoisting it out of the mutable automation status text into a persistent row bound only to the fallback reason",
+          "result": "implemented in source; still uncompiled/unbuilt, runtime verification pending"
+        },
+        {
+          "attempt": 3,
+          "date": "2026-08-28",
+          "action": "Authored deterministic JVM tests for ExternalAIFallbackClassifier (login/security URL classification, DOM-state priority ordering, null/blank handling)",
+          "result": "Tests authored (ExternalAIDraftUtilsTest.kt); not executed in this environment (no build/test execution permitted)"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
+      "id": "composer_external_ai_single_spinner_and_static_preview",
+      "route_state": "composer_generating",
+      "element": "card",
+      "dimension": "visual",
+      "classification": "visual",
+      "source_ref": {
+        "kind": "source",
+        "value": "Provider choice icons stay static and disabled/dimmed during generation; exactly one rotating spinner in status card; preview card stays still with empty placeholder",
+        "location": "StarManager/Features/Composer/ComposerView.swift"
+      },
+      "target_observation": "Static dimmed provider buttons, single rotating CircularProgressIndicator in composer.statusCard, and undisturbed empty preview card placeholder during generation",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-28",
+          "action": "Implemented single spinner generation status card, dimmed static provider icons, and still empty preview card",
+          "result": "implemented in source; runtime verification pending"
+        }
+      ],
+      "reopen_history": []
+    },
+    {
+      "id": "composer_external_ai_success_keyboard_focus",
+      "route_state": "composer_completed",
+      "element": "input",
+      "dimension": "interaction",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "source",
+        "value": "On successful non-empty import, forcibly clear story input focus and hide software keyboard until user explicitly taps input again; empty/error import does not clear focus",
+        "location": "StarManager/Features/Composer/ComposerView.swift"
+      },
+      "target_observation": "Explicit Compose FocusManager.clearFocus(force = true) and SoftwareKeyboardController.hide() on non-empty imported result",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt",
+      "fixture": "catalog-v1/all",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-28",
+          "action": "Implemented forced focus clearing and keyboard hiding on non-empty import with guard preserving focus on empty/error import",
+          "result": "implemented in source; runtime verification pending"
         }
       ],
       "reopen_history": []

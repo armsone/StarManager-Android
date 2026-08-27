@@ -87,6 +87,7 @@ class MainActivity : ComponentActivity() {
             storage.remove(CreatorProfileStore.PRESETS_STORAGE_KEY)
             storage.remove(CreatorProfileStore.DEFAULT_STYLE_VERSION_KEY)
             storage.remove(CreatorProfileStore.APPEARANCE_STORAGE_KEY)
+            storage.remove(CreatorProfileStore.SHOW_EXTERNAL_AI_BROWSER_STORAGE_KEY)
             storage.remove(ComposerViewModel.KEY_PASTE_GUIDANCE_SHOWN)
             FixtureHooks.resetStateRequested = false
         }

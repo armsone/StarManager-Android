@@ -229,7 +229,7 @@ capabilities:
     preconditions:
       - "CreatorProfileStore initialized"
     inputs:
-      - "User preferences (voice, emoji toggle, style preset, mood, length, character count, extra instructions, prohibited phrases, hashtags, theme)"
+      - "User preferences (voice, emoji toggle, style preset, mood, length, character count, extra instructions, prohibited phrases, hashtags, external AI browser visibility, theme)"
     normal_result: "Unified settings displayed and persisted in order: 내 프리셋, 기본 설정, 글쓰기 취향, 추가 옵션, 프리셋 보관, 외부 AI 로그인 관리, 앱 업데이트, 테마 관리."
     states:
       IDLE: "Viewing and editing settings"
@@ -246,10 +246,11 @@ capabilities:
         additionalInstructions: "String?"
         prohibitedPhrases: "String"
         hashtagStyle: "String"
+      showsExternalAIBrowser: "Boolean, defaults false and is stored separately from CreatorProfile JSON"
     producer_consumer_routes:
       - "ProfileSettingsScreen consumes and mutates CreatorProfileStore StateFlow"
     persistence_relaunch:
-      - "SharedPreferences / JSON storage via CreatorProfileStore"
+      - "SharedPreferences / JSON storage via CreatorProfileStore; showsExternalAIBrowser stored as 0/1 and defaults to 0"
     permissions_privacy_security:
       - "Local device storage only"
     background_lifecycle:
@@ -265,8 +266,8 @@ capabilities:
         status: "reference_verified"
         description: "Native SwiftUI SettingsView"
       android:
-        status: "runtime_verified_visual_unpaired"
-        description: "Compose ProfileSettingsScreen rendered on Samsung SM-F968N with all 8 sections in the requested order; paired iOS visual evidence remains missing"
+        status: "implemented_source_only"
+        description: "Previously rendered on Samsung SM-F968N with all 8 sections in order; the new persisted browser visibility switch is implemented in source but not yet runtime verified"
     intentional_differences:
       section_placement: "앱 업데이트 and 테마 관리 placed at bottom as requested"
     implementations:
@@ -275,15 +276,16 @@ capabilities:
         entry_file: "StarManager/Features/Settings/ProfileSettingsView.swift"
         verification: "reference_verified"
       android:
-        status: "runtime_verified_visual_unpaired"
+        status: "implemented_source_only"
         entry_file: "app/src/main/java/com/armsone/starmanager/ui/settings/ProfileSettingsScreen.kt"
-        verification: "65 unit tests, debug build, and lint passed; Android runtime section order captured; paired iOS visual capture pending"
+        verification: "Prior settings surface had 65 unit tests, debug build, lint, and runtime section-order evidence; new browser visibility option has only an authored persistence test and source inspection pending fresh execution"
     dependencies:
       - "androidx.compose.material3"
       - "com.armsone.starmanager.model.CreatorProfileStore"
     parity_row_ids:
       - "settings_section_order_parity"
       - "settings_simplified_preferences_surface"
+      - "settings_external_ai_browser_visibility"
 
   - id: "external_ai_login_session_reuse"
     purpose: "Dedicated in-app full-screen WebView management for external AI provider logins (Gemini, ChatGPT, Claude) with persistent CookieManager and WebStorage session reuse across settings and composer."
@@ -346,51 +348,70 @@ capabilities:
       - "settings_external_ai_login_management"
 
   - id: "external_ai_provider_roster_and_composer_browser"
-    purpose: "External AI provider choices (Gemini, ChatGPT, Claude) in single horizontal row in Composer, opening directly into an app-owned full-screen WebView browser with automated compact prompt filling, response extraction/cleaning, and manual fallback actions."
+    purpose: "External AI provider choices (Gemini, ChatGPT, Claude, 기기 AI) in a single responsive row in Composer with user-selectable hidden/visible browser automation, deterministic status progression, and manual fallback in-app browser."
     source_refs:
       - file: "StarManager/Features/Composer/ComposerView.swift"
-        description: "AI choice row and in-app web browser for AI generation"
+        description: "AI choice row and retained background web browser for AI generation"
     entry_points:
-      - "ComposerScreen -> AIChoiceCard / GlossyPrimaryButton ('{provider}에서 만들기')"
+      - "ComposerScreen -> AIChoiceCard / GlossyPrimaryButton"
     preconditions:
       - "Non-empty user idea entered"
     inputs:
       - "User idea, selected provider (Gemini, ChatGPT, Claude, 기기 AI), compact prompt"
-    normal_result: "In-app WebView opens provider, automates prompt filling, detects and cleans generated answer, and imports into Composer preview."
+      - "Persisted browser visibility choice (default OFF)"
+    normal_result: "With browser visibility OFF, an attached WebView runs invisibly; with it ON, the same provider automation is shown full-screen from connection onward. Both modes inject and submit the prompt, relay status/errors, and automatically import a stable cleaned result."
     states:
-      CONNECTING: "Connecting to provider URL"
-      WAITING_FOR_INPUT: "Waiting for DOM input element"
-      INPUT_READY: "Prompt populated in input area"
-      GENERATING: "Observing assistant streaming answer"
-      COMPLETED: "Stable answer extracted, cleaned, and imported"
+      IDLE: "Waiting for user action"
+      CONNECTING: "Connecting to provider and preparing input area ('{provider}에 연결하는 중…' / '입력창을 준비하고 있어요')"
+      SUBMITTED: "Prompt submitted to provider ('정보를 보냈어요')"
+      WAITING_ELAPSED: "Live elapsed timer ticking ('답변을 기다리는 중 (00초)' ... '답변을 기다리는 중 (1분 00초)')"
+      COMPLETED: "Stable answer extracted, cleaned, and imported into preview; focus/keyboard dismissed"
+      FALLBACK_INTERACTION: "In-app browser presented with reason banner for login, security/CAPTCHA, or manual input"
+      ERROR: "Sanitized provider error relayed to Composer status card"
     algorithms_and_thresholds:
       - "DOM selector matching for ProseMirror, Lexical, textarea, and contenteditable"
-      - "Answer cleaning: strip think tags, markdown code fences, preambles, and quotes"
+      - "Streaming protection: 3 consecutive stable polls of cleaned text (min 15 chars) without active streaming indicators"
+      - "Elapsed timer formatting: %02d초 for <60s, %d분 %02d초 for >=60s"
+      - "Error sanitization: strip HTML tags, script/style, URLs, tokens/secrets, stack traces; concise max 80 chars"
+      - "Fallback detection: OAuth/login redirects, Cloudflare/CAPTCHA challenges, or unsubmitted/missing input"
+      - "Keyboard focus dismissal: clearFocus(force = true) and hide keyboard on non-empty import only"
     data_contracts:
       AIChoice:
         External: "Gemini, ChatGPT, Claude"
         OnDevice: "기기 AI"
+      ExternalAIAutomationPhase: "IDLE, CONNECTING, SUBMITTED, WAITING_ELAPSED, COMPLETED, FALLBACK_REQUIRED, ERROR"
+      ExternalAIFallbackReason: "LOGIN_REQUIRED ('로그인이 필요해요'), SECURITY_VERIFICATION ('보안 확인이 필요해요'), MANUAL_INPUT_REQUIRED ('입력창을 확인해 주세요'), MANUAL_CONFIRMATION ('직접 확인이 필요해요')"
+      showsExternalAIBrowser: "Boolean; false when no prior choice is stored"
     producer_consumer_routes:
-      - "ComposerScreen launches ExternalAISurface(mode = GENERATION) -> onImport -> ComposerViewModel.importAIResult"
+      - "ComposerScreen executes HiddenExternalAIWebView -> ComposerViewModel.importAIResult -> PreviewColumn"
+      - "When showsExternalAIBrowser=true: ComposerScreen executes ExternalAISurface from request start -> status/error callbacks -> automatic ComposerViewModel.importAIResult"
+      - "Fallback trigger -> ExternalAISurface (with fallback reason banner) -> onImport -> ComposerViewModel.importAIResult"
     persistence_relaunch:
-      - "Shared CookieManager cookies across sessions"
+      - "Shared CookieManager and WebStorage retain login session tokens across launches"
+      - "CreatorProfileStore persists browser visibility locally; absent value resolves to OFF"
     permissions_privacy_security:
       - "Strict HTTPS allowlist, no credentials logged or exposed"
+      - "Background WebView attached with realistic viewport but zero opacity, non-interactive, and inaccessible to accessibility tree"
     background_lifecycle:
-      - "WebView destroyed on surface dismiss; state updated via StateFlow"
+      - "Attached hidden WebView lifecycle cleanly destroyed and coroutines canceled on resetComposer or new request"
+      - "Fresh automation state per request while cookie storage persists"
     gestures_accessibility:
-      - "Buttons for '다시 넣기', '문구 복사', '가져오기', close icon, and back gesture"
+      - "Provider buttons stay static and dimmed during generation; single rotating spinner in status card"
+      - "Preview card remains still with empty placeholder until result arrives"
+      - "Cancel button in status card for safe cancellation"
     supported_devices_layouts:
-      - "Horizontal single-row cards on normal text scale, full-screen generation surface"
+      - "Single horizontal row for normal text scale, 2x2 grid for large text scale (>=1.3x)"
+      - "Compact and regular two-column composer layouts"
     visual_reference:
-      - "Brand icon cards in order Gemini, ChatGPT, Claude, 기기 AI, glossy action button"
+      - "Static brand icon cards in order Gemini, ChatGPT, Claude, 기기 AI"
+      - "Generation status card with single spinner, step title, live elapsed time, and cancel button"
     platform_adaptations:
       ios:
         status: "reference_verified"
-        description: "WKWebView automation and Apple Intelligence"
+        description: "Retained WKWebView background automation with live timer and interactive fallback"
       android:
-        status: "runtime_roster_verified_generation_pending"
-        description: "Provider roster rendered in order on device; AndroidView WebView generation automation remains runtime-pending"
+        status: "implemented_source_only"
+        description: "Default-hidden attached WebView plus optional full-screen visible automation, with live elapsed timer, single composer spinner, error sanitization, automatic import, fallback reason banner, and focus dismissal"
     intentional_differences:
       local_ai_label: "Android uses '기기 AI' for local deterministic generator as Apple Intelligence is unavailable"
     implementations:
@@ -399,15 +420,22 @@ capabilities:
         entry_file: "StarManager/Features/Composer/ComposerView.swift"
         verification: "reference_verified"
       android:
-        status: "runtime_roster_verified_generation_pending"
-        entry_file: "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAISurface.kt"
-        verification: "Provider order verified on Samsung SM-F968N; prompt fill, submit, stable extraction, and import remain runtime-pending"
+        status: "implemented_source_only"
+        entry_file: "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt"
+        verification: "Unit tests and source integrity verified; device runtime/visual verification pending"
     dependencies:
       - "android.webkit.WebView"
       - "android.webkit.CookieManager"
     parity_row_ids:
       - "composer_external_ai_provider_roster"
       - "composer_external_ai_in_app_browser"
+      - "composer_external_ai_background_browser_lifecycle"
+      - "composer_external_ai_status_and_elapsed_timer"
+      - "composer_external_ai_error_relay_and_sanitization"
+      - "composer_external_ai_visible_fallback"
+      - "composer_external_ai_single_spinner_and_static_preview"
+      - "settings_external_ai_browser_visibility"
+      - "composer_external_ai_success_keyboard_focus"
       - "external_ai_answer_cleaner_parity"
 
   - id: "compact_generation_prompt"

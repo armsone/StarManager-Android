@@ -64,6 +64,9 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
     private val _appearance: MutableStateFlow<AppAppearance>
     val appearance: StateFlow<AppAppearance> get() = _appearance.asStateFlow()
 
+    private val _showsExternalAIBrowser: MutableStateFlow<Boolean>
+    val showsExternalAIBrowser: StateFlow<Boolean> get() = _showsExternalAIBrowser.asStateFlow()
+
     private val _profile: MutableStateFlow<CreatorProfile>
     val profile: StateFlow<CreatorProfile> get() = _profile.asStateFlow()
 
@@ -73,6 +76,9 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
     init {
         val storedAppearance = storage.getString(APPEARANCE_STORAGE_KEY)
         _appearance = MutableStateFlow(AppAppearance.fromString(storedAppearance))
+        _showsExternalAIBrowser = MutableStateFlow(
+            storage.getInt(SHOW_EXTERNAL_AI_BROWSER_STORAGE_KEY, 0) == 1
+        )
         val storedPresets = storage.getString(PRESETS_STORAGE_KEY)?.let { json ->
             runCatching {
                 gson.fromJson<List<WritingPreset>>(
@@ -172,6 +178,11 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
         storage.putString(APPEARANCE_STORAGE_KEY, appearance.name)
     }
 
+    fun setShowsExternalAIBrowser(showsBrowser: Boolean) {
+        _showsExternalAIBrowser.value = showsBrowser
+        storage.putInt(SHOW_EXTERNAL_AI_BROWSER_STORAGE_KEY, if (showsBrowser) 1 else 0)
+    }
+
     private fun save() {
         storage.putString(STORAGE_KEY, gson.toJson(_profile.value))
     }
@@ -186,5 +197,6 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
         const val DEFAULT_STYLE_VERSION_KEY = "defaultGenerationStyleVersion"
         const val CURRENT_DEFAULT_STYLE_VERSION = 1
         const val APPEARANCE_STORAGE_KEY = "appAppearance"
+        const val SHOW_EXTERNAL_AI_BROWSER_STORAGE_KEY = "showsExternalAIBrowser"
     }
 }

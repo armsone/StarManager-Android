@@ -141,11 +141,31 @@ import com.armsone.starmanager.model.GenerationStylePreset
 import com.armsone.starmanager.model.PostLength
 import com.armsone.starmanager.model.PostMood
 import com.armsone.starmanager.service.DirectAIProvider
+import android.annotation.SuppressLint
+import android.view.ViewGroup
+import android.webkit.CookieManager
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.viewinterop.AndroidView
+import com.armsone.starmanager.ui.externalai.ExternalAIDomErrorResult
+import com.armsone.starmanager.ui.externalai.ExternalAIFallbackClassifier
+import com.armsone.starmanager.ui.externalai.ExternalAIFallbackReason
+import com.armsone.starmanager.ui.externalai.ExternalAIPollResult
+import com.armsone.starmanager.ui.externalai.ExternalAIScripts
+import com.armsone.starmanager.ui.externalai.ExternalAISecurityPolicy
 import com.armsone.starmanager.ui.externalai.ExternalAISurface
 import com.armsone.starmanager.ui.externalai.ExternalAISurfaceMode
+import com.armsone.starmanager.ui.externalai.ExternalAIStabilityReducer
+import com.armsone.starmanager.ui.externalai.ExternalAIStabilityState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
@@ -213,8 +233,16 @@ private fun CreationColumn(
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val appearance = LocalAppAppearance.current
     val profile by viewModel.profileStore.profile.collectAsStateWithLifecycle()
+
+    LaunchedEffect(state.lastImportSuccessToken) {
+        if (state.lastImportSuccessToken > 0L) {
+            focusManager.clearFocus(force = true)
+            keyboardController?.hide()
+        }
+    }
 
     val maxSelection = maxOf(1, MediaAttachmentPolicy.availableSlots(state.mediaItems.size))
     val photoPicker = rememberLauncherForActivityResult(
@@ -618,9 +646,9 @@ private fun BorderedActionButton(
 private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState) {
     val context = LocalContext.current
     val appearance = LocalAppAppearance.current
+    val showsExternalAIBrowser by viewModel.profileStore.showsExternalAIBrowser.collectAsStateWithLifecycle()
     val trimmedIdeaEmpty = state.idea.trim().isEmpty()
     var selectedChoiceId by rememberSaveable { mutableStateOf(AIChoice.External(DirectAIProvider.GEMINI).id) }
-    var activeExternalProvider by rememberSaveable { mutableStateOf<DirectAIProvider?>(null) }
     val selectedChoice = AIChoice.all.firstOrNull { it.id == selectedChoiceId } ?: AIChoice.all.first()
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -631,6 +659,7 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
                     AIChoiceCard(
                         choice = choice,
                         selected = choice.id == selectedChoiceId,
+                        enabled = !state.isGenerating,
                         onClick = { selectedChoiceId = choice.id },
                         modifier = Modifier
                             .weight(1f)
@@ -641,38 +670,38 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
             }
         }
 
-        GlossyPrimaryButton(
-            onClick = {
-                when (selectedChoice) {
-                    AIChoice.OnDevice -> viewModel.generateDraft()
-                    is AIChoice.External -> {
-                        activeExternalProvider = selectedChoice.provider
+        if (state.isGenerating) {
+            GenerationStatusCard(
+                viewModel = viewModel,
+                state = state,
+                appearance = appearance
+            )
+        } else {
+            GlossyPrimaryButton(
+                onClick = {
+                    when (selectedChoice) {
+                        AIChoice.OnDevice -> viewModel.generateDraft()
+                        is AIChoice.External -> {
+                            viewModel.startExternalAIGeneration(selectedChoice.provider)
+                        }
                     }
-                }
-            },
-            enabled = !trimmedIdeaEmpty && !state.isGenerating,
-            appearance = appearance,
-            modifier = Modifier.testTag("composer.ai.run")
-        ) {
-            if (state.isGenerating) {
-                CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
-            } else {
+                },
+                enabled = !trimmedIdeaEmpty && !state.isGenerating,
+                appearance = appearance,
+                modifier = Modifier.testTag("composer.ai.run")
+            ) {
                 Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-            }
-            Spacer(Modifier.width(9.dp))
-            Text(
-                if (state.isGenerating) {
-                    "게시물을 만드는 중…"
-                } else {
+                Spacer(Modifier.width(9.dp))
+                Text(
                     when (selectedChoice) {
                         AIChoice.OnDevice -> "기기 AI로 만들기"
                         is AIChoice.External -> "${selectedChoice.provider.title}에서 만들기"
-                    }
-                },
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
+                    },
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
         }
 
         val pendingProvider = state.pendingExternalProvider
@@ -702,16 +731,53 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
         }
     }
 
-    val externalProvider = activeExternalProvider
-    if (externalProvider != null) {
-        ExternalAISurface(
-            provider = externalProvider,
-            mode = ExternalAISurfaceMode.GENERATION,
+    // 설정이 꺼져 있으면 백그라운드 WebView, 켜져 있으면 같은 자동화를 보이는 WebView에서 수행한다.
+    val automationProvider = state.activeAutomationProvider
+    if (
+        state.isGenerating &&
+        automationProvider != null &&
+        !showsExternalAIBrowser &&
+        !state.isFallbackBrowserVisible
+    ) {
+        HiddenExternalAIWebView(
+            provider = automationProvider,
             prompt = viewModel.externalPrompt(),
-            onClose = { activeExternalProvider = null },
+            requestId = state.automationRequestId,
+            onSubmitted = {
+                viewModel.onAutomationSubmitted()
+            },
+            onFallbackRequired = { reason ->
+                viewModel.onAutomationFallbackRequired(reason)
+            },
+            onError = { err ->
+                viewModel.onAutomationError(err)
+            },
+            onSuccess = { answer ->
+                viewModel.importAIResult(answer, automationProvider)
+            }
+        )
+    }
+
+    // 사용자가 항상 보기를 선택했거나 상호작용 폴백이 필요할 때 보이는 표면.
+    if (
+        state.isGenerating &&
+        automationProvider != null &&
+        (showsExternalAIBrowser || state.isFallbackBrowserVisible)
+    ) {
+        ExternalAISurface(
+            provider = automationProvider,
+            mode = ExternalAISurfaceMode.GENERATION,
+            fallbackReason = state.fallbackReason,
+            prompt = viewModel.externalPrompt(),
+            onClose = {
+                if (showsExternalAIBrowser) viewModel.cancelGeneration()
+                else viewModel.dismissFallbackBrowser()
+            },
+            onSubmitted = viewModel::onAutomationSubmitted,
+            onError = viewModel::onAutomationError,
+            autoImportOnComplete = true,
             onImport = { text ->
-                viewModel.importAIResult(text, externalProvider)
-                activeExternalProvider = null
+                viewModel.importAIResult(text, automationProvider)
             },
             appearance = appearance
         )
@@ -719,9 +785,234 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
 }
 
 @Composable
+private fun GenerationStatusCard(
+    viewModel: ComposerViewModel,
+    state: ComposerUiState,
+    appearance: AppAppearance = LocalAppAppearance.current
+) {
+    val isBk = appearance == AppAppearance.BK
+    val shape = RoundedCornerShape(14.dp)
+    val bg = if (isBk) Color(0xFFF1F3F6) else BrandTheme.paper
+    val border = BorderStroke(1.dp, if (isBk) Color(0xFFE2E6EC) else BrandTheme.border)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(border, shape)
+            .background(bg, shape)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .testTag("composer.statusCard"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // 단 하나의 회전 프로그레스 인디케이터
+        CircularProgressIndicator(
+            modifier = Modifier.size(20.dp),
+            color = BrandTheme.accent,
+            strokeWidth = 2.5.dp
+        )
+
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                state.automationStepTitle ?: "게시물을 만드는 중…",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = BrandTheme.labelPrimary(appearance),
+                maxLines = 1
+            )
+            Text(
+                state.automationStepSubtitle ?: "잠시만 기다려 주세요",
+                fontSize = 13.sp,
+                color = BrandTheme.labelSecondary(appearance),
+                maxLines = 1
+            )
+        }
+
+        TextButton(
+            onClick = { viewModel.cancelGeneration() },
+            modifier = Modifier.testTag("composer.ai.cancel")
+        ) {
+            Text("취소", fontSize = 14.sp, color = BrandTheme.labelSecondary(appearance))
+        }
+    }
+}
+
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun HiddenExternalAIWebView(
+    provider: DirectAIProvider,
+    prompt: String,
+    requestId: Int,
+    onSubmitted: () -> Unit,
+    onFallbackRequired: (ExternalAIFallbackReason) -> Unit,
+    onError: (String?) -> Unit,
+    onSuccess: (String) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var webViewRef by remember(requestId) { mutableStateOf<WebView?>(null) }
+    var stabilityState by remember(requestId) { mutableStateOf(ExternalAIStabilityState()) }
+    var isSubmitted by remember(requestId) { mutableStateOf(false) }
+    var isPolling by remember(requestId) { mutableStateOf(false) }
+
+    LaunchedEffect(isPolling, requestId) {
+        if (isPolling) {
+            while (isPolling) {
+                delay(1800L)
+                val wv = webViewRef ?: break
+                if (!isPolling) break
+
+                // 오류와 답변 추출을 순차적으로 확인해 동일 틱에서
+                // onError와 onSuccess가 동시에 발생하는 중복 종료 이벤트를 막는다.
+                val domErr = suspendCancellableCoroutine<ExternalAIDomErrorResult> { cont ->
+                    wv.evaluateJavascript(ExternalAIScripts.extractErrorScript()) { errRes ->
+                        cont.resume(ExternalAIScripts.parseErrorResult(errRes), null)
+                    }
+                }
+                if (!isPolling) break
+                if (domErr.hasError && !domErr.error.isNullOrBlank()) {
+                    isPolling = false
+                    onError(domErr.error)
+                    break
+                }
+
+                val poll = suspendCancellableCoroutine<ExternalAIPollResult> { cont ->
+                    wv.evaluateJavascript(ExternalAIScripts.extractAnswerScript(provider)) { ansRes ->
+                        cont.resume(ExternalAIScripts.parsePollResult(ansRes), null)
+                    }
+                }
+                if (!isPolling) break
+                val next = ExternalAIStabilityReducer.step(stabilityState, poll)
+                stabilityState = next
+                if (next.isStable && next.stableAnswer != null) {
+                    isPolling = false
+                    onSuccess(next.stableAnswer)
+                }
+            }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .size(0.dp)
+            .graphicsLayer { alpha = 0f }
+            .clearAndSetSemantics { }
+    ) {
+        AndroidView(
+            factory = { ctx ->
+                WebView(ctx).apply {
+                    layoutParams = ViewGroup.LayoutParams(1080, 2400)
+                    settings.apply {
+                        javaScriptEnabled = true
+                        domStorageEnabled = true
+                        databaseEnabled = true
+                        loadWithOverviewMode = true
+                        useWideViewPort = true
+                        mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                        cacheMode = WebSettings.LOAD_DEFAULT
+                        userAgentString = userAgentString.replace("; wv", "")
+                    }
+
+                    val cookieManager = CookieManager.getInstance()
+                    cookieManager.setAcceptCookie(true)
+                    cookieManager.setAcceptThirdPartyCookies(this, true)
+
+                    webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(
+                            view: WebView?,
+                            request: WebResourceRequest?
+                        ): Boolean {
+                            val targetUrl = request?.url?.toString()
+                            if (!ExternalAISecurityPolicy.isAllowedUrl(targetUrl, provider)) {
+                                return true
+                            }
+                            val fallback = ExternalAIFallbackClassifier.classifyUrl(targetUrl)
+                            if (fallback != null) {
+                                onFallbackRequired(fallback)
+                            }
+                            return false
+                        }
+
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            super.onPageFinished(view, url)
+                            cookieManager.flush()
+
+                            val fallback = ExternalAIFallbackClassifier.classifyUrl(url)
+                            if (fallback != null) {
+                                onFallbackRequired(fallback)
+                                return
+                            }
+
+                            view?.evaluateJavascript(ExternalAIScripts.checkChallengeScript()) { chRes ->
+                                if (ExternalAIScripts.parseChallengeResult(chRes)) {
+                                    onFallbackRequired(ExternalAIFallbackReason.SECURITY_VERIFICATION)
+                                    return@evaluateJavascript
+                                }
+
+                                if (!isSubmitted && prompt.isNotBlank()) {
+                                    // 재진입/중복 onPageFinished 호출로 인한 이중 제출을 막기 위해
+                                    // 실제 전송 성공 여부와 무관하게 시도 시점에 즉시 플래그를 세운다.
+                                    isSubmitted = true
+                                    scope.launch {
+                                        delay(1000L)
+                                        val script = ExternalAIScripts.injectPromptScript(provider, prompt)
+                                        view.evaluateJavascript(script) { injRes ->
+                                            val injection = ExternalAIScripts.parseInjectionResult(injRes)
+                                            if (!injection.inputFound) {
+                                                isSubmitted = false
+                                                onFallbackRequired(ExternalAIFallbackReason.MANUAL_INPUT_REQUIRED)
+                                            } else if (!injection.submitted) {
+                                                isSubmitted = false
+                                                onFallbackRequired(ExternalAIFallbackReason.MANUAL_CONFIRMATION)
+                                            } else {
+                                                onSubmitted()
+                                                isPolling = true
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        override fun onReceivedError(
+                            view: WebView?,
+                            errorCode: Int,
+                            description: String?,
+                            failingUrl: String?
+                        ) {
+                            super.onReceivedError(view, errorCode, description, failingUrl)
+                            if (failingUrl == provider.url) {
+                                onError(description)
+                            }
+                        }
+                    }
+
+                    loadUrl(provider.url)
+                    webViewRef = this
+                }
+            },
+            update = { wv ->
+                webViewRef = wv
+            }
+        )
+    }
+
+    DisposableEffect(requestId) {
+        onDispose {
+            webViewRef?.let { wv ->
+                wv.stopLoading()
+                wv.destroy()
+            }
+            webViewRef = null
+            isPolling = false
+        }
+    }
+}
+
+@Composable
 private fun AIChoiceCard(
     choice: AIChoice,
     selected: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     appearance: AppAppearance = LocalAppAppearance.current
@@ -734,7 +1025,7 @@ private fun AIChoiceCard(
         if (selected) BrandTheme.paper else BrandTheme.surface
     }
     val border = if (selected) {
-        BorderStroke(1.5.dp, BrandTheme.accent)
+        BorderStroke(1.5.dp, if (enabled) BrandTheme.accent else BrandTheme.accent.copy(alpha = 0.5f))
     } else {
         BorderStroke(1.dp, if (isBk) Color(0xFFE2E6EC) else BrandTheme.border)
     }
@@ -742,10 +1033,15 @@ private fun AIChoiceCard(
     Column(
         modifier = modifier
             .heightIn(min = 72.dp)
+            .graphicsLayer {
+                if (!enabled) {
+                    alpha = 0.55f
+                }
+            }
             .border(border, shape)
             .background(bg, shape)
             .semantics { this.selected = selected }
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 5.dp, vertical = 9.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(7.dp)

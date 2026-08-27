@@ -92,6 +92,7 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
     val context = LocalContext.current
     val updateManager = remember(context) { DirectUpdateManager.get(context) }
     val appearance by store.appearance.collectAsStateWithLifecycle()
+    val showsExternalAIBrowser by store.showsExternalAIBrowser.collectAsStateWithLifecycle()
     val profile by store.profile.collectAsStateWithLifecycle()
     val presets by store.presets.collectAsStateWithLifecycle()
 
@@ -350,10 +351,36 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                 SettingsSection(
                     header = "외부 AI 로그인 관리",
                     icon = Icons.Filled.AccountCircle,
-                    footer = "처음 열면 각 서비스의 공식 로그인 페이지가 떠요. 한 번 로그인하면 이 기기에서는 서비스가 로그아웃시키기 전까지 기억돼요. 스타매니저는 비밀번호를 보거나 저장하지 않아요.",
+                    footer = "브라우저 보기는 기본적으로 꺼져 있어요. 처음 로그인하면 각 서비스의 공식 페이지가 뜨고, 스타매니저는 비밀번호를 보거나 저장하지 않아요.",
                     appearance = appearance,
                     variant = IconWellVariant.CARBON
                 ) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "브라우저 보기",
+                                fontSize = 17.sp,
+                                color = BrandTheme.labelPrimary(appearance)
+                            )
+                            Text(
+                                "AI가 답하는 화면을 처음부터 보여줘요.",
+                                fontSize = 13.sp,
+                                color = BrandTheme.labelSecondary(appearance)
+                            )
+                        }
+                        StarSwitch(
+                            checked = showsExternalAIBrowser,
+                            appearance = appearance,
+                            onCheckedChange = store::setShowsExternalAIBrowser,
+                            modifier = Modifier.testTag("settings.showsExternalAIBrowser")
+                        )
+                    }
+                    HorizontalDivider(color = BrandTheme.divider(appearance))
                     val providers = listOf(DirectAIProvider.GEMINI, DirectAIProvider.OPEN_AI, DirectAIProvider.CLAUDE)
                     providers.forEachIndexed { index, provider ->
                         if (index > 0) {
