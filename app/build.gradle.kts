@@ -11,13 +11,16 @@ android {
         applicationId = "com.armsone.starmanager"
         minSdk = 26
         targetSdk = 37
-        versionCode = 345444
-        versionName = "2.3.0"
-        buildConfigField("String", "BUILD_NUMBER", "\"202608282124\"")
+        versionCode = 345988
+        versionName = "2.4.0"
+        buildConfigField("String", "BUILD_NUMBER", "\"202608290628\"")
     }
 
     buildTypes {
         release {
+            // Keep the certificate used by existing direct-download installs while
+            // producing a non-debuggable release build that can replace them in place.
+            signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

@@ -110,14 +110,15 @@ class CreatorProfilePromptTest {
             generationControls = GenerationControls(characterCount = 150)
         )
 
-        val photoOnly = profile.photoOnlyPrompt(PostMood.WITTY, PostLength.MEDIUM)
-        assertTrue(photoOnly.contains("[상황]\n대표 사진 한 장이 함께 첨부돼 있어."))
+        val photoOnly = profile.photoOnlyPrompt(PostMood.WITTY, PostLength.MEDIUM, imageCount = 8)
+        assertTrue(photoOnly.contains("[상황]\n선택한 사진 8장이 순서대로 첨부돼 있어."))
+        assertTrue(photoOnly.contains("사진을 모두 실제로 살펴보고"))
         assertTrue(photoOnly.contains("사진 속 장면과 분위기를 바탕으로 한국어 글을 쓰고"))
         assertTrue(photoOnly.contains("- 글자 수: 완성 문구를 135~165자 사이로 써"))
         assertFalse(photoOnly.contains("카카오톡에 올릴"))
 
-        val photoAndText = profile.photoAndTextPrompt("오늘의 하늘", PostMood.CALM, PostLength.LONG)
-        assertTrue(photoAndText.contains("[상황]\n대표 사진 한 장과 내가 적은 메모가 함께 있어."))
+        val photoAndText = profile.photoAndTextPrompt("오늘의 하늘", PostMood.CALM, PostLength.LONG, imageCount = 5)
+        assertTrue(photoAndText.contains("[상황]\n선택한 사진 5장이 순서대로 첨부돼 있고 내가 적은 메모가 함께 있어."))
         assertTrue(photoAndText.contains("[내가 입력한 내용]\n오늘의 하늘"))
         assertTrue(photoAndText.contains("- 글자 수: 완성 문구를 135~165자 사이로 써"))
     }

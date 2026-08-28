@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +42,9 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 internal fun ContinuousCameraCapture(
@@ -52,6 +56,7 @@ internal fun ContinuousCameraCapture(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val photos = remember { mutableStateListOf<ByteArray>() }
+    val scope = rememberCoroutineScope()
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var lensFacing by remember { mutableStateOf(CameraSelector.LENS_FACING_BACK) }
     var isCapturing by remember { mutableStateOf(false) }
@@ -122,10 +127,17 @@ internal fun ContinuousCameraCapture(
                             ContextCompat.getMainExecutor(context),
                             object : ImageCapture.OnImageSavedCallback {
                                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                                    runCatching { file.readBytes() }.getOrNull()?.takeIf { it.isNotEmpty() }?.let(photos::add)
-                                    file.delete()
-                                    isCapturing = false
-                                    if (currentCount + photos.size >= maxCount) onDone(photos.toList())
+                                    scope.launch {
+                                        val prepared = withContext(Dispatchers.IO) {
+                                            runCatching {
+                                                ComposerImagePipeline.prepareForComposer(file.readBytes())
+                                            }.getOrNull()
+                                        }
+                                        file.delete()
+                                        prepared?.takeIf { it.isNotEmpty() }?.let(photos::add)
+                                        isCapturing = false
+                                        if (currentCount + photos.size >= maxCount) onDone(photos.toList())
+                                    }
                                 }
 
                                 override fun onError(exception: ImageCaptureException) {

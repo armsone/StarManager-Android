@@ -4,7 +4,7 @@ iOS SwiftUI 앱 `/StarManager`의 도달 가능한 두 탭(**만들기**, **내 
 단일 모듈 Kotlin/Jetpack Compose 앱입니다.
 
 - applicationId: `com.armsone.starmanager` · minSdk 26 · target/compileSdk 37 · Java/Kotlin 17
-- 앱 버전: `2.3.0` · versionCode `345444` · 표시 빌드 `202608282124`
+- 앱 버전: `2.4.0` · versionCode `345988` · 표시 빌드 `202608290628`
 - 폰/태블릿 지원, 화면 회전 잠금 없음, 라이트 테마 강제(iOS `preferredColorScheme(.light)` 대응)
 - 설정에서 GitHub Releases의 서명 APK 업데이트를 자동 또는 수동으로 확인·다운로드하고 시스템 설치자로 넘깁니다.
 - iOS의 아카이브(README 전용)와 도달 불가능한 레거시 백엔드/Image Playground 표면은 이식하지 않음

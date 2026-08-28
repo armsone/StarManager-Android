@@ -27,6 +27,7 @@ import com.armsone.starmanager.ui.externalai.ExternalAIAttachment
 import com.armsone.starmanager.ui.externalai.ExternalAIAutomationPhase
 import com.armsone.starmanager.ui.externalai.ExternalAIErrorSanitizer
 import com.armsone.starmanager.ui.externalai.ExternalAIFallbackReason
+import com.armsone.starmanager.ui.externalai.ExternalAIImageNormalizer
 import com.armsone.starmanager.ui.externalai.ExternalAITimerFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -58,7 +59,7 @@ data class ComposerUiState(
     val captionCandidates: Map<CaptionSource, CaptionCandidate> = emptyMap(),
     val pendingExternalProvider: DirectAIProvider? = null,
     val activeAutomationProvider: DirectAIProvider? = null,
-    val activeAttachment: ExternalAIAttachment? = null,
+    val activeAttachments: List<ExternalAIAttachment> = emptyList(),
     val automationPhase: ExternalAIAutomationPhase = ExternalAIAutomationPhase.IDLE,
     val automationElapsedSeconds: Long = 0L,
     val automationStepTitle: String? = null,
@@ -96,14 +97,10 @@ class ComposerViewModel : ViewModel() {
     val hasRepresentativePhoto: Boolean
         get() = _state.value.mediaItems.any { it.kind == MediaKind.IMAGE }
 
-    fun makeRepresentativePhotoAttachment(): ExternalAIAttachment? {
-        val firstImage = _state.value.mediaItems.firstOrNull { it.kind == MediaKind.IMAGE } ?: return null
-        return ExternalAIAttachment(
-            data = firstImage.data,
-            mimeType = "image/jpeg",
-            filename = "representative_photo.jpg"
+    fun makeSelectedPhotoAttachments(): List<ExternalAIAttachment> =
+        ExternalAIImageNormalizer.normalizeOrdered(
+            _state.value.mediaItems.filter { it.kind == MediaKind.IMAGE }.map { it.data }
         )
-    }
 
     fun hasContent(): Boolean = _state.value.run {
         idea.isNotEmpty() || generatedPost != null || mediaItems.isNotEmpty() || captionCandidates.isNotEmpty() || pendingExternalProvider != null || isGenerating
@@ -131,7 +128,7 @@ class ComposerViewModel : ViewModel() {
                 captionCandidates = emptyMap(),
                 pendingExternalProvider = null,
                 activeAutomationProvider = null,
-                activeAttachment = null,
+                activeAttachments = emptyList(),
                 automationPhase = ExternalAIAutomationPhase.IDLE,
                 automationElapsedSeconds = 0L,
                 automationStepTitle = null,
@@ -151,7 +148,7 @@ class ComposerViewModel : ViewModel() {
             state.copy(
                 isGenerating = false,
                 activeAutomationProvider = null,
-                activeAttachment = null,
+                activeAttachments = emptyList(),
                 automationPhase = ExternalAIAutomationPhase.IDLE,
                 automationElapsedSeconds = 0L,
                 automationStepTitle = null,
@@ -244,7 +241,7 @@ class ComposerViewModel : ViewModel() {
             it.copy(
                 isGenerating = true,
                 activeAutomationProvider = null,
-                activeAttachment = null,
+                activeAttachments = emptyList(),
                 automationPhase = ExternalAIAutomationPhase.CONNECTING,
                 automationElapsedSeconds = 0L,
                 automationStepTitle = "기기 AI로 만드는 중…",
@@ -311,17 +308,17 @@ class ComposerViewModel : ViewModel() {
         }
         timerJob?.cancel()
         generationJob?.cancel()
-        val attachment = makeRepresentativePhotoAttachment()
+        val imageCount = _state.value.mediaItems.count { it.kind == MediaKind.IMAGE }
         update { state ->
             state.copy(
                 isGenerating = true,
-                activeAutomationProvider = provider,
+                activeAutomationProvider = null,
                 pendingExternalProvider = provider,
-                activeAttachment = attachment,
-                automationPhase = ExternalAIAutomationPhase.CONNECTING,
+                activeAttachments = emptyList(),
+                automationPhase = if (imageCount > 0) ExternalAIAutomationPhase.ATTACHING else ExternalAIAutomationPhase.CONNECTING,
                 automationElapsedSeconds = 0L,
-                automationStepTitle = "${provider.title}에 연결하는 중…",
-                automationStepSubtitle = if (attachment != null) "사진과 입력창을 준비하고 있어요" else "입력창을 준비하고 있어요",
+                automationStepTitle = if (imageCount > 0) "사진을 준비하는 중…" else "${provider.title}에 연결하는 중…",
+                automationStepSubtitle = if (imageCount > 0) "선택한 사진 ${imageCount}장을 전송용으로 줄이고 있어요" else "입력창을 준비하고 있어요",
                 fallbackReason = null,
                 isFallbackBrowserVisible = false,
                 errorMessage = null,
@@ -331,6 +328,36 @@ class ComposerViewModel : ViewModel() {
                 activeCaptionSource = null,
                 automationRequestId = state.automationRequestId + 1
             )
+        }
+        generationJob = viewModelScope.launch {
+            try {
+                val attachments = withContext(Dispatchers.Default) { makeSelectedPhotoAttachments() }
+                update { state ->
+                    if (!state.isGenerating || state.pendingExternalProvider != provider) state else state.copy(
+                        activeAutomationProvider = provider,
+                        activeAttachments = attachments,
+                        automationPhase = ExternalAIAutomationPhase.CONNECTING,
+                        automationStepTitle = "${provider.title}에 연결하는 중…",
+                        automationStepSubtitle = if (attachments.isNotEmpty()) {
+                            "사진 ${attachments.size}장과 입력창을 준비하고 있어요"
+                        } else {
+                            "입력창을 준비하고 있어요"
+                        }
+                    )
+                }
+            } catch (_: CancellationException) {
+                return@launch
+            } catch (_: Exception) {
+                update { state -> state.copy(
+                    isGenerating = false,
+                    activeAutomationProvider = null,
+                    activeAttachments = emptyList(),
+                    automationPhase = ExternalAIAutomationPhase.ERROR,
+                    automationStepTitle = null,
+                    automationStepSubtitle = null,
+                    errorMessage = "선택한 사진을 전송용으로 준비하지 못했어요. 사진을 확인하고 다시 시도해 주세요."
+                ) }
+            }
         }
     }
 
@@ -355,7 +382,7 @@ class ComposerViewModel : ViewModel() {
                         s.copy(
                             isGenerating = false,
                             activeAutomationProvider = null,
-                            activeAttachment = null,
+                            activeAttachments = emptyList(),
                             automationPhase = ExternalAIAutomationPhase.ERROR,
                             automationElapsedSeconds = elapsed,
                             automationStepTitle = null,
@@ -411,7 +438,7 @@ class ComposerViewModel : ViewModel() {
             it.copy(
                 isGenerating = false,
                 activeAutomationProvider = null,
-                activeAttachment = null,
+                activeAttachments = emptyList(),
                 automationPhase = ExternalAIAutomationPhase.ERROR,
                 errorMessage = sanitized,
                 fallbackReason = null,
@@ -422,12 +449,13 @@ class ComposerViewModel : ViewModel() {
 
     fun externalPrompt(): String {
         val profile = profileStore.profile.value
-        val hasPhoto = hasRepresentativePhoto
+        val imageCount = _state.value.mediaItems.count { it.kind == MediaKind.IMAGE }
+        val hasPhoto = imageCount > 0
         return when {
             hasPhoto && trimmedIdea.isNotEmpty() ->
-                profile.photoAndTextPrompt(trimmedIdea, profile.mood, profile.preferredLength)
+                profile.photoAndTextPrompt(trimmedIdea, profile.mood, profile.preferredLength, imageCount)
             hasPhoto && trimmedIdea.isEmpty() ->
-                profile.photoOnlyPrompt(profile.mood, profile.preferredLength)
+                profile.photoOnlyPrompt(profile.mood, profile.preferredLength, imageCount)
             else ->
                 profile.generationPrompt(trimmedIdea, profile.mood, profile.preferredLength)
         }
@@ -463,7 +491,7 @@ class ComposerViewModel : ViewModel() {
                 it.copy(
                     isGenerating = false,
                     activeAutomationProvider = null,
-                    activeAttachment = null,
+                    activeAttachments = emptyList(),
                     automationPhase = ExternalAIAutomationPhase.ERROR,
                     errorMessage = "복사한 결과가 비어 있어요."
                 )
@@ -504,7 +532,7 @@ class ComposerViewModel : ViewModel() {
                 activeCaptionSource = candidate.source,
                 isGenerating = false,
                 activeAutomationProvider = null,
-                activeAttachment = null,
+                activeAttachments = emptyList(),
                 automationPhase = ExternalAIAutomationPhase.COMPLETED,
                 fallbackReason = null,
                 isFallbackBrowserVisible = false,
@@ -554,15 +582,27 @@ class ComposerViewModel : ViewModel() {
         mediaLoadJob?.cancel()
         mediaLoadJob = viewModelScope.launch {
             try {
+                val requestedSlots = MediaAttachmentPolicy.availableSlots(_state.value.mediaItems.size)
                 val loaded = withContext(Dispatchers.IO) {
-                    uris.mapNotNull { uri ->
-                        val bytes = runCatching {
-                            resolver.openInputStream(uri)?.use { it.readBytes() }
-                        }.getOrNull() ?: return@mapNotNull null
-                        val mime = resolver.getType(uri)
-                        val kind = if (mime?.startsWith("video") == true) MediaKind.VIDEO else MediaKind.IMAGE
-                        val ext = mime?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
-                        ComposerMedia(data = bytes, kind = kind, fileExtension = ext)
+                    buildList {
+                        for (uri in uris.take(requestedSlots)) {
+                            val original = runCatching {
+                                resolver.openInputStream(uri)?.use { it.readBytes() }
+                            }.getOrNull() ?: continue
+                            val mime = resolver.getType(uri)
+                            val kind = if (mime?.startsWith("video") == true) MediaKind.VIDEO else MediaKind.IMAGE
+                            val prepared = if (kind == MediaKind.IMAGE) {
+                                runCatching { ComposerImagePipeline.prepareForComposer(original) }.getOrNull() ?: continue
+                            } else {
+                                original
+                            }
+                            val ext = if (kind == MediaKind.IMAGE) {
+                                "jpg"
+                            } else {
+                                mime?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
+                            }
+                            add(ComposerMedia(data = prepared, kind = kind, fileExtension = ext))
+                        }
                     }
                 }
                 update { state ->

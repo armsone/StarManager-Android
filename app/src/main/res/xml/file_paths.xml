@@ -2,5 +2,6 @@
 <paths>
     <cache-path name="share" path="share/" />
     <cache-path name="camera" path="camera/" />
+    <cache-path name="aibi" path="aibi/" />
     <external-files-path name="updates" path="Download/" />
 </paths>

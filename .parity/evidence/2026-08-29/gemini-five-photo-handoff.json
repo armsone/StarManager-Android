@@ -1,0 +1,18 @@
+{
+  "sanitized": true,
+  "observedAt": "2026-08-29T00:04:38+09:00",
+  "device": "SM-F968N",
+  "provider": "gemini",
+  "selectedImageCount": 5,
+  "normalizedImageCount": 5,
+  "nativeFileChooserMode": "MODE_OPEN_MULTIPLE",
+  "nativeUriCount": 5,
+  "semanticAttachmentPreviewCount": 5,
+  "promptSubmittedAfterExactCount": true,
+  "providerGenerationStarted": true,
+  "appProcessAliveAfterSubmission": true,
+  "orientationRegressionObserved": false,
+  "containsPromptOrAnswerText": false,
+  "containsPhotoContent": false,
+  "result": "exact-five-photo-handoff-and-submit-passed"
+}

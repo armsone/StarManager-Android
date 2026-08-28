@@ -3,7 +3,7 @@ product_id: "starmanager"
 
 reference_inventory:
   member: "ios"
-  revision: "2.3.0"
+  revision: "2.4.0"
   scanned_roots:
     - "StarManager"
   uncovered_source_refs: []
@@ -367,7 +367,7 @@ capabilities:
     entry_points:
       - "ComposerScreen -> AIChoiceCard / GlossyPrimaryButton"
     preconditions:
-      - "A representative image or non-empty user idea is present"
+      - "At least one selected image or a non-empty user idea is present"
     inputs:
       - "User idea, selected provider (Gemini, ChatGPT, Claude, 기기 AI), compact prompt"
       - "Persisted browser visibility choice (default OFF)"
@@ -464,7 +464,7 @@ capabilities:
     purpose: "One media-first composer supports photo-only, photo-and-text, or text-only drafting; AI assistance updates the same editable text field instead of opening a separate preview panel."
     source_refs:
       - file: "StarManager/Features/Composer/ComposerView.swift"
-        description: "Current iPhone unified composer and optional representative-photo external AI handoff"
+        description: "Current iPhone unified composer and selected-image external AI handoff"
     entry_points:
       - "ComposerScreen"
     preconditions:
@@ -473,28 +473,34 @@ capabilities:
       - "Zero to eight media items"
       - "Optional editable draft text"
       - "Selected external provider or on-device AI"
-    normal_result: "Media is selected or captured before or alongside writing; a generated answer replaces the same editable draft field and remains editable. External AI receives the first image when one exists; videos are never sent to AI."
+    normal_result: "Media is selected or captured before or alongside writing; a generated answer replaces the same editable draft field and remains editable. External AI receives every selected image in user-defined order, from one through eight; videos are never sent to AI."
     states:
       EMPTY: "No media and no text; generation disabled"
-      MEDIA_ONLY: "Representative first image plus an explicit request to write from the image"
-      MEDIA_AND_TEXT: "Representative first image plus the user's draft and visible writing preferences"
+      MEDIA_ONLY: "One through eight selected images plus an explicit request to write from all images"
+      MEDIA_AND_TEXT: "One through eight selected images plus the user's draft and visible writing preferences"
       TEXT_ONLY: "Draft text plus visible writing preferences"
       GENERATED_EDITABLE: "AI answer has returned to the same editable text field"
+      MEDIA_PREPARING: "Selected sources are read and normalized one at a time off the main thread"
+      ATTACHMENT_NATIVE_HANDOFF: "Android returns the complete ordered FileProvider URI batch through WebChromeClient"
     algorithms_and_thresholds:
-      - "Representative media is the first image in user-defined order; video entries are skipped"
-      - "On-device generation accepts text or a representative-photo-only request; external providers receive the representative image for image-aware writing"
-      - "External provider attachment capability is positively confirmed; failure opens visible recovery instead of silently dropping the photo"
+      - "External AI snapshots every image in user-defined order, up to eight; video entries are skipped"
+      - "Transfer copies are normalized sequentially to JPEG with a 2,048 px long-edge and 2,000,000-byte per-image ceiling; Android applies EXIF orientation before scaling"
+      - "Android gallery and camera ingestion read one source at a time, apply EXIF orientation, and bound host copies to a 4,096 px long edge and 8,000,000 bytes before retaining them"
+      - "Android thumbnails decode off the main thread at a 320 px target in RGB_565; the active preview decodes off the main thread at a 1,400 px target"
+      - "Android exposes ordered normalized copies as content URIs through FileProvider; WebChromeClient returns the full array for a multiple input, or one ordered URI per repeated chooser callback for Gemini Android's single-file image input, verifying each preview increment; bounded DataTransfer staging remains the fallback"
+      - "External provider preview count must equal the requested image count before prompt submission; failure opens visible recovery instead of silently dropping any photo"
     data_contracts:
-      representativeImage: "Optional bytes and MIME type derived from the first image item"
+      selectedImages: "Ordered list of zero through eight normalized JPEG attachments derived from every selected image item"
       composerText: "Single editable source of truth before and after generation"
     producer_consumer_routes:
       - "Photo picker or camera -> ComposerViewModel mediaItems -> composer media editor"
+      - "Normalized selected photos -> cache/aibi ordered files -> FileProvider content URIs -> hidden or visible provider WebView file chooser"
       - "Composer text/media -> external AI request -> same composer text field"
-      - "Composer text or representative-photo-only request -> on-device fallback generator -> same composer text field"
+      - "Composer text or selected-photo-only request -> on-device fallback generator -> same composer text field"
     persistence_relaunch:
       - "Composer draft remains transient; profile preferences persist locally"
     permissions_privacy_security:
-      - "Only the representative image is handed to the selected provider after the user invokes it"
+      - "Only selected images are handed to the selected provider after the user invokes it"
       - "No video is handed to AI"
     background_lifecycle:
       - "Cancel or reset destroys the pending browser task without clearing unrelated local media"
@@ -506,29 +512,31 @@ capabilities:
       - "A compact hero, a distinct top panel containing media controls/editable story/AI/share, and a separate dense style panel below"
     platform_adaptations:
       ios:
-        status: "build_verified_runtime_provider_pending"
-        description: "SwiftUI composer and WKWebView bridge built, installed, and launched on iPhone; live authenticated provider image-upload trace remains pending"
+        status: "runtime_verified_user_reported"
+        description: "SwiftUI composer and WKWebView bridge built and installed; the user confirmed live Gemini, ChatGPT, and Claude execution on iPhone"
       android:
-        status: "implemented_runtime_provider_pending"
-        description: "Compose composer and Android WebView bridge implement the same observable states; live authenticated provider image-upload trace remains pending"
+        status: "build_and_install_verified_runtime_provider_pending"
+        description: "Compose composer now performs sequential EXIF-aware bounded decoding and the Android WebView uses a native ordered FileProvider batch before DataTransfer fallback; tests, lint, build, data-preserving installs, and launches passed on phone and tablet, while fresh portrait, performance, and authenticated provider traces remain pending"
     intentional_differences:
-      file_bridge: "iOS uses WKWebView JavaScript evaluation; Android uses WebView JavaScript evaluation and native byte transport"
+      file_bridge: "iOS uses WKWebView file-panel URLs; Android uses FileProvider content URIs through WebChromeClient, with WebView DataTransfer as a bounded fallback"
     implementations:
       ios:
-        status: "build_verified_runtime_provider_pending"
+        status: "runtime_verified_user_reported"
         entry_file: "StarManager/Features/Composer/ComposerView.swift"
-        verification: "iPhone device build, replacement install, and launch passed; live provider photo attachment remains pending"
+        verification: "iPhone device build, replacement install, and launch passed; the user confirmed Gemini, ChatGPT, and Claude all worked perfectly"
       android:
-        status: "build_verified_runtime_provider_pending"
+        status: "build_and_install_verified_runtime_provider_pending"
         entry_file: "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt"
-        verification: "76 JVM tests, assembleDebug, replacement install, launch, and composer/settings captures passed on SM-F968N; live provider photo attachment remains pending"
+        verification: "JVM tests, assembleDebug, lintDebug, AIBI contract regressions, and data-preserving replacement installs and launches passed on SM-F968N and SM-T500; fresh portrait, eight-photo responsiveness, and live provider attachment traces remain pending"
     dependencies:
       - "Native photo picker and camera"
       - "AIBI provider profiles"
     parity_row_ids:
       - "composer_unified_media_first_flow"
       - "composer_ai_input_modes"
-      - "composer_representative_photo_handoff"
+      - "composer_selected_image_batch_handoff"
+      - "composer_selected_image_video_exclusion"
+      - "composer_selected_image_failure_recovery"
       - "composer_same_field_ai_return"
 
   - id: "compact_generation_prompt"
@@ -543,7 +551,7 @@ capabilities:
     preconditions:
       - "CreatorProfile and user idea"
     inputs:
-      - "optional text, optional representative photo, mood, destination, audience age, original-text reflection, emoji intensity, character target, style, tone, line breaks, and additional instructions"
+      - "optional text, zero through eight selected photos, mood, destination, audience age, original-text reflection, emoji intensity, character target, style, tone, line breaks, and additional instructions"
     normal_result: "Structured compact Korean prompt string ready for external AI web automation or clipboard copy."
     states:
       READY: "Prompt generated synchronously"

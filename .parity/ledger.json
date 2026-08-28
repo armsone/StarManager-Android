@@ -84,6 +84,119 @@
       "implementation_ref": "../StarManager/StarManager/Features/Composer/ComposerView.swift#writingSettingsCard",
       "evidence": [{ "id": "expanded_pair", "type": "capture_pair", "path": ".parity/evidence/2026-08-28/guidelines-expanded-pair.json", "sha256": "e43617d977c14a3e3595aa7f05937e377ab9af2f48864240f058ccd74256c803", "post_change": true }],
       "attempts": [{ "attempt": 1, "date": "2026-08-28", "action": "Set the iPhone detailed-guidelines field to 13pt.", "result": "Expanded paired captures confirm comparable body size." }]
+    },
+    {
+      "id": "composer_external_ai.selected_image_batch.handoff",
+      "route_state": "composer_external_ai_generation",
+      "element": "selected_image_batch",
+      "dimension": "send every selected image in user order from one through eight before prompt submission",
+      "fixture": "authenticated_provider_with_ordered_1_and_8_image_batches",
+      "classification": "functional",
+      "status": "matched",
+      "source_ref": { "kind": "runtime", "value": "iPhone Gemini, ChatGPT, and Claude live paths confirmed by user on 2026-08-28" },
+      "target_observation": "ADB-selected five-photo run delivered five ordered FileProvider URIs through MODE_OPEN_MULTIPLE, exposed five semantic attachment controls, submitted only after the exact-count gate, and entered provider generation without an app crash.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAISurface.kt#attachOrderedPhotosToProvider",
+      "fallback_capable": false,
+      "evidence": [
+        { "id": "gemini_five_photo_handoff", "type": "behavior_trace", "path": ".parity/evidence/2026-08-29/gemini-five-photo-handoff.json", "sha256": "e5c04b377315d0b5e0f642eabc9dba19daa23b89604215300321b703b56b1c00", "post_change": true }
+      ],
+      "attempts": [
+        { "attempt": 1, "date": "2026-08-28", "action": "Implemented sequential normalization, bounded WebView staging, one-event batch commit, and exact preview-count gate.", "result": "80 unit tests, lintDebug, assembleDebug, phone install, and tablet install passed; live behavior trace pending." },
+        { "attempt": 2, "date": "2026-08-28", "action": "Added a native WebChromeClient multiple-file callback backed by ordered FileProvider URIs before the DataTransfer fallback.", "result": "User rerun still stopped at the Gemini menu because its image input is single-file." },
+        { "attempt": 3, "date": "2026-08-28", "action": "Inspected only sanitized file-input metadata, then changed Android delivery to one ordered URI per single-file callback with a preview increment gate after every photo.", "result": "AIBI tests, Android tests, lint, build, three-device install, relaunch, and immediate crash checks passed; fresh authenticated rerun pending." },
+        { "attempt": 4, "date": "2026-08-29", "action": "Removed Gemini's false-positive upload trigger selector, allowed its animated file sheet to render before inspection, used a visible Android WebView for native media handoff, and counted semantic attachment-close controls.", "result": "ADB live run selected five photos, delivered five native URIs, confirmed five attachments, submitted the prompt, entered provider generation, and kept the app process alive." }
+      ],
+      "reopen_history": [
+        { "date": "2026-08-28", "observed_by": "user", "description": "Android Gemini repeatedly left the attachment sheet open and did not attach the six requested photos." },
+        { "date": "2026-08-28", "observed_by": "user", "description": "After the native multi-file attempt, Android Gemini again left the sheet open with five requested photos unattached; live sanitized DOM metadata showed image/* multiple=false.", "resolved_by_evidence": "gemini_five_photo_handoff" }
+      ]
+    },
+    {
+      "id": "composer_external_ai.selected_image_batch.video_exclusion",
+      "route_state": "composer_external_ai_generation",
+      "element": "selected_image_batch",
+      "dimension": "exclude videos while preserving the relative order of every selected image",
+      "fixture": "mixed_ordered_media_with_images_and_videos",
+      "classification": "functional",
+      "status": "needs_verification",
+      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Composer/ComposerView.swift#activePhotoAttachments" },
+      "target_observation": "Android filters MediaKind.IMAGE before normalization; mixed-media device trace pending.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerViewModel.kt#makeSelectedPhotoAttachments",
+      "fallback_capable": false,
+      "evidence": [],
+      "attempts": [{ "attempt": 1, "date": "2026-08-28", "action": "Changed Android external-AI media snapshot from the first image to the ordered list of all image items.", "result": "Source and build verification passed; mixed-media behavior trace pending." }]
+    },
+    {
+      "id": "composer_external_ai.selected_image_batch.failure_recovery",
+      "route_state": "composer_external_ai_attachment_failure",
+      "element": "all_photos_recovery_banner",
+      "dimension": "block prompt submission and show the exact requested photo count when any attachment is missing",
+      "fixture": "provider_attachment_input_forced_to_fail",
+      "classification": "functional",
+      "status": "needs_verification",
+      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Composer/ExternalAIBrowserView.swift#attachmentFallbackBanner" },
+      "target_observation": "Android fallback source displays the selected count; negative live provider trace pending.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAISurface.kt#ExternalAISurface",
+      "fallback_capable": true,
+      "evidence": [],
+      "attempts": [
+        { "attempt": 1, "date": "2026-08-28", "action": "Added fail-closed exact-count gate and selected-count recovery copy.", "result": "Source, unit, build, install, and launch verification passed; positive and negative runtime evidence pending." },
+        { "attempt": 2, "date": "2026-08-28", "action": "Recorded the sanitized six-photo Gemini failure and retained the exact-count fail-closed banner.", "result": "The recovery banner behaved safely, but the underlying attachment handoff required the native file-chooser correction." }
+      ]
+    },
+    {
+      "id": "composer_media.selected_photo.orientation",
+      "route_state": "composer_media_selected",
+      "element": "selected_photo_preview",
+      "dimension": "portrait photos remain upright from gallery ingestion through thumbnails and main preview",
+      "fixture": "portrait_jpeg_with_exif_rotation",
+      "classification": "functional",
+      "status": "needs_verification",
+      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Composer/ComposerView.swift#mediaEditor" },
+      "target_observation": "User observed a portrait photo rendered sideways before the fix; the installed Android build now applies EXIF orientation before storage and bounded display decode.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerImagePipeline.kt",
+      "fallback_capable": false,
+      "evidence": [],
+      "attempts": [
+        { "attempt": 1, "date": "2026-08-28", "action": "Applied all EXIF orientation variants during sequential gallery/camera preparation and display decode.", "result": "Source, JVM policy tests, lint, build, install, and launch passed; fresh portrait device observation pending." }
+      ]
+    },
+    {
+      "id": "composer_media.selected_photo.decode_memory",
+      "route_state": "composer_media_selected",
+      "element": "selected_photo_preview",
+      "dimension": "one through eight photos do not decode or remain resident at full source resolution",
+      "fixture": "ordered_eight_high_resolution_photos",
+      "classification": "functional",
+      "status": "needs_verification",
+      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Composer/ComposerView.swift#mediaEditor" },
+      "target_observation": "User observed severe phone slowdown before the fix; the installed build performs sequential ingestion off the main thread, 320px RGB_565 thumbnails, and a 1400px bounded main preview.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt#rememberMediaBitmap",
+      "fallback_capable": false,
+      "evidence": [],
+      "attempts": [
+        { "attempt": 1, "date": "2026-08-28", "action": "Removed full-resolution main-thread preview decoding and simultaneous original ingestion.", "result": "Build, lint, install, launch, and idle crash-log checks passed; eight-photo interaction and memory trace pending." }
+      ]
+    },
+    {
+      "id": "composer_media.selected_photo.bitmap_lifecycle",
+      "route_state": "composer_media_selected",
+      "element": "selected_photo_preview",
+      "dimension": "Compose never draws a bitmap after its native storage has been recycled",
+      "fixture": "select_photos_then_recompose_or_page",
+      "classification": "functional",
+      "status": "reopened",
+      "source_ref": { "kind": "runtime", "value": "Android Canvas bitmap lifetime contract" },
+      "target_observation": "The user observed an app crash; Android crash buffer confirmed Canvas: trying to use a recycled bitmap at 2026-08-28 23:12:07 KST.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt#rememberMediaBitmap",
+      "fallback_capable": false,
+      "evidence": [],
+      "attempts": [
+        { "attempt": 1, "date": "2026-08-28", "action": "Removed DisposableEffect bitmap.recycle so Compose and GC own the lifetime of already bounded display bitmaps.", "result": "JVM tests, lint, build, data-preserving reinstall, relaunch, and immediate crash-buffer check passed; repeated selected-photo interaction trace pending." }
+      ],
+      "reopen_history": [
+        { "date": "2026-08-28", "observed_by": "user", "description": "App terminated while displaying the newly decoded selected photos; device crash buffer identified a recycled bitmap draw." }
+      ]
     }
   ]
 }

@@ -2,6 +2,8 @@ package com.armsone.starmanager
 
 import com.armsone.starmanager.ui.composer.MediaAttachmentPolicy
 import com.armsone.starmanager.ui.composer.MediaKind
+import com.armsone.starmanager.ui.composer.ComposerImagePipeline
+import com.armsone.starmanager.ui.composer.ComposerImagePolicy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -63,5 +65,14 @@ class MediaAttachmentPolicyTest {
     @Test
     fun `mime type fallback for empty list is image`() {
         assertEquals("image/*", MediaAttachmentPolicy.mimeTypeFor(emptyList()))
+    }
+
+    @Test
+    fun `composer images are bounded for storage and display decoding`() {
+        val policy = ComposerImagePolicy()
+        assertEquals(4_096, policy.maximumLongEdgePixels)
+        assertEquals(8_000_000, policy.maximumBytes)
+        assertEquals(8, ComposerImagePipeline.sampleSizeFor(12_000, 9_000, 1_400))
+        assertEquals(32, ComposerImagePipeline.sampleSizeFor(12_000, 9_000, 320))
     }
 }

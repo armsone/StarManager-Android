@@ -83,11 +83,12 @@ data class CreatorProfile(
 
     fun photoOnlyPrompt(
         mood: PostMood = this.mood,
-        length: PostLength = this.preferredLength
+        length: PostLength = this.preferredLength,
+        imageCount: Int = 1
     ): String {
         val parts = mutableListOf<String>()
 
-        parts.add("[상황]\n대표 사진 한 장이 함께 첨부돼 있어. 사진을 실제로 살펴보고, 사진에 없는 내용은 지어내지 마.")
+        parts.add("[상황]\n선택한 사진 ${imageCount.coerceIn(1, 8)}장이 순서대로 첨부돼 있어. 사진을 모두 실제로 살펴보고, 사진에 없는 내용은 지어내지 마.")
 
         val resultLines = mutableListOf<String>()
         resultLines.add("사진 속 장면과 분위기를 바탕으로 한국어 글을 쓰고, 완성 문구만 출력해.")
@@ -113,12 +114,13 @@ data class CreatorProfile(
     fun photoAndTextPrompt(
         idea: String,
         mood: PostMood = this.mood,
-        length: PostLength = this.preferredLength
+        length: PostLength = this.preferredLength,
+        imageCount: Int = 1
     ): String {
         val trimmed = idea.trim()
         val parts = mutableListOf<String>()
 
-        parts.add("[상황]\n대표 사진 한 장과 내가 적은 메모가 함께 있어. 사진을 실제로 살펴보고, 사진과 메모 둘 다에 어울리는 글을 써 줘. 사진에 없는 내용은 지어내지 마.")
+        parts.add("[상황]\n선택한 사진 ${imageCount.coerceIn(1, 8)}장이 순서대로 첨부돼 있고 내가 적은 메모가 함께 있어. 사진을 모두 실제로 살펴보고, 사진과 메모 둘 다에 어울리는 글을 써 줘. 사진에 없는 내용은 지어내지 마.")
         parts.add("[내가 입력한 내용]\n$trimmed")
 
         val resultLines = mutableListOf<String>()

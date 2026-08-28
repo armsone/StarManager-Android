@@ -23,14 +23,17 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.ArrowCircleDown
 import androidx.compose.material.icons.outlined.Diamond
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,6 +61,7 @@ import com.armsone.starmanager.ui.externalai.ExternalAISurface
 import com.armsone.starmanager.ui.externalai.ExternalAISurfaceMode
 import com.armsone.starmanager.update.DirectUpdateManager
 import com.armsone.starmanager.update.DirectUpdateSettings
+import kotlinx.coroutines.launch
 
 /**
  * "설정" 화면.
@@ -73,6 +77,8 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
     val showsExternalAIBrowser by store.showsExternalAIBrowser.collectAsStateWithLifecycle()
 
     var activeLoginProvider by remember { mutableStateOf<DirectAIProvider?>(null) }
+    var showsLogoutConfirmation by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val loginProviders = remember {
         listOf(DirectAIProvider.GEMINI, DirectAIProvider.OPEN_AI, DirectAIProvider.CLAUDE)
     }
@@ -83,8 +89,10 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
 
     LaunchedEffect(refreshTrigger) {
         loginProviders.forEach { provider ->
-            val state = ExternalAIAuthStatus.probe(context, provider)
-            authStates = authStates + (provider to state)
+            launch {
+                val state = ExternalAIAuthStatus.probe(context, provider)
+                authStates = authStates + (provider to state)
+            }
         }
     }
 
@@ -111,7 +119,7 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                 SettingsSection(
                     header = "외부 로그인 관리",
                     icon = Icons.Filled.AccountCircle,
-                    footer = "브라우저 보기는 기본적으로 꺼져 있어요. 켜면 글을 만드는 과정을 처음부터 볼 수 있어요. 한 번 로그인하면 이 기기에서는 서비스가 로그아웃시키기 전까지 기억돼요. 스타매니저는 비밀번호를 보거나 저장하지 않아요.",
+                    footer = "서비스 행을 누르면 공식 로그인 화면을 열 수 있어요. 모든 외부 AI 로그아웃은 이 앱의 Gemini, ChatGPT, Claude 웹 세션을 함께 지워요. 스타매니저는 비밀번호를 보거나 저장하지 않아요.",
                     appearance = appearance,
                     variant = IconWellVariant.CARBON
                 ) {
@@ -157,7 +165,10 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { activeLoginProvider = provider }
+                                .clickable {
+                                    ExternalAIAuthStatus.markLoginFlowStarted(context, provider)
+                                    activeLoginProvider = provider
+                                }
                                 .padding(vertical = 12.dp)
                                 .testTag("settings.loginRow.${provider.rawValue}"),
                             verticalAlignment = Alignment.CenterVertically,
@@ -190,10 +201,34 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                                     color = when (state) {
                                         ExternalAIAuthState.REQUIRES_LOGIN -> BrandTheme.accent
                                         ExternalAIAuthState.LOGGED_IN -> Color(0xFF34C759)
-                                        ExternalAIAuthState.CHECKING -> BrandTheme.labelSecondary(appearance)
+                                        ExternalAIAuthState.CHECKING,
+                                        ExternalAIAuthState.UNKNOWN -> BrandTheme.labelSecondary(appearance)
                                     }
                                 )
                             }
+                        }
+                    }
+
+                    HorizontalDivider(color = BrandTheme.divider(appearance))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = {
+                                authStates = loginProviders.associateWith { ExternalAIAuthState.CHECKING }
+                                refreshTrigger += 1
+                            },
+                            modifier = Modifier.testTag("settings.login.refresh")
+                        ) {
+                            Text("상태 다시 확인")
+                        }
+                        TextButton(
+                            onClick = { showsLogoutConfirmation = true },
+                            modifier = Modifier.testTag("settings.login.logoutAll")
+                        ) {
+                            Text("모두 로그아웃", color = BrandTheme.accent)
                         }
                     }
                 }
@@ -248,6 +283,34 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                 refreshTrigger += 1
             },
             appearance = appearance
+        )
+    }
+
+
+    if (showsLogoutConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showsLogoutConfirmation = false },
+            title = { Text("모든 외부 AI에서 로그아웃할까요?") },
+            text = { Text("이 앱에 저장된 Gemini, ChatGPT, Claude 웹 세션을 지웁니다. 다시 사용하려면 각 서비스 행을 눌러 로그인하세요.") },
+            dismissButton = {
+                TextButton(onClick = { showsLogoutConfirmation = false }) {
+                    Text("취소")
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showsLogoutConfirmation = false
+                        scope.launch {
+                            ExternalAIAuthStatus.clearAllSessions(context)
+                            authStates = loginProviders.associateWith { ExternalAIAuthState.REQUIRES_LOGIN }
+                        }
+                    },
+                    modifier = Modifier.testTag("settings.login.logoutAll.confirm")
+                ) {
+                    Text("로그아웃", color = BrandTheme.accent)
+                }
+            }
         )
     }
 }

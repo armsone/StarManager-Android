@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.os.SystemClock
+import android.util.Log
 import android.view.MotionEvent
 import android.view.InputDevice
 import android.view.KeyEvent
@@ -76,9 +77,11 @@ import com.armsone.starmanager.design.LocalAppAppearance
 import com.armsone.starmanager.model.AppAppearance
 import com.armsone.starmanager.service.DirectAIProvider
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 
 @SuppressLint("SetJavaScriptEnabled")
@@ -87,7 +90,7 @@ fun ExternalAISurface(
     provider: DirectAIProvider,
     mode: ExternalAISurfaceMode,
     prompt: String = "",
-    attachment: ExternalAIAttachment? = null,
+    attachments: List<ExternalAIAttachment> = emptyList(),
     fallbackReason: ExternalAIFallbackReason? = null,
     onClose: () -> Unit,
     onLoginSuccess: () -> Unit = {},
@@ -100,6 +103,7 @@ fun ExternalAISurface(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
+    var popupWebViewRef by remember { mutableStateOf<WebView?>(null) }
     var activeFallbackReason by remember(fallbackReason) { mutableStateOf(fallbackReason) }
     var detectedFallbackReason by remember { mutableStateOf<ExternalAIFallbackReason?>(null) }
     val effectiveFallbackReason = activeFallbackReason ?: detectedFallbackReason
@@ -130,6 +134,26 @@ fun ExternalAISurface(
     var elapsedSeconds by remember { mutableLongStateOf(0L) }
     var stabilityState by remember { mutableStateOf(ExternalAIStabilityState()) }
     var navigationGeneration by remember { mutableStateOf(0) }
+    var nativeAttachmentBatch by remember { mutableStateOf(ExternalAINativeAttachmentBatch.EMPTY) }
+    var nativeAttachmentPreparationFailed by remember { mutableStateOf(false) }
+    var hasAttachedBatch by remember(attachments) { mutableStateOf(attachments.isEmpty()) }
+
+    LaunchedEffect(attachments) {
+        nativeAttachmentPreparationFailed = false
+        runCatching {
+            withContext(Dispatchers.IO) {
+                ExternalAINativeAttachmentBatch.prepare(context, attachments)
+            }
+        }.onSuccess {
+            nativeAttachmentBatch = it
+        }.onFailure {
+            nativeAttachmentPreparationFailed = true
+        }
+    }
+    val batchForDisposal = nativeAttachmentBatch
+    DisposableEffect(batchForDisposal) {
+        onDispose { batchForDisposal.dispose() }
+    }
 
     fun copyPromptToClipboard() {
         if (prompt.isNotBlank()) {
@@ -289,8 +313,14 @@ fun ExternalAISurface(
     }
 
     // 메인 프레임 내비게이션 완료 시 자동 채우기 및 전송 루프 실행
-    LaunchedEffect(navigationGeneration) {
-        if (mode.isLogin || (prompt.isBlank() && attachment == null) || hasSubmittedPrompt || hasImportedAnswer) return@LaunchedEffect
+    LaunchedEffect(navigationGeneration, nativeAttachmentBatch.uris.size, nativeAttachmentPreparationFailed) {
+        if (mode.isLogin || (prompt.isBlank() && attachments.isEmpty()) || hasSubmittedPrompt || hasImportedAnswer) return@LaunchedEffect
+        if (nativeAttachmentPreparationFailed) {
+            fillFailed = true
+            return@LaunchedEffect
+        }
+        if (attachments.isNotEmpty() && nativeAttachmentBatch.uris.size != attachments.size) return@LaunchedEffect
+        nativeAttachmentBatch.resetDelivery()
         val wv = webViewRef ?: return@LaunchedEffect
         if (!ExternalAISecurityPolicy.canInjectScript(wv.url, provider)) return@LaunchedEffect
         isAutoFilling = true
@@ -298,7 +328,19 @@ fun ExternalAISurface(
         val startTime = System.currentTimeMillis()
         var baselineCaptured = false
         var baselineCount = 0
-        var attachmentHandled = (attachment == null)
+        var attachmentHandled = attachments.isEmpty() || hasAttachedBatch
+
+        if (!attachmentHandled) {
+            attachmentHandled = attachOrderedPhotosToProvider(wv, provider, attachments)
+            if (!attachmentHandled) {
+                activeFallbackReason = ExternalAIFallbackReason.ATTACHMENT_FAILED
+                detectedFallbackReason = ExternalAIFallbackReason.ATTACHMENT_FAILED
+                isAutoFilling = false
+                fillFailed = true
+                return@LaunchedEffect
+            }
+            hasAttachedBatch = true
+        }
 
         while (isActive && System.currentTimeMillis() - startTime < 45_000L && !hasSubmittedPrompt && !hasImportedAnswer) {
             if (isPageReady) {
@@ -311,20 +353,7 @@ fun ExternalAISurface(
                     baselineCaptured = true
                 }
 
-                if (!attachmentHandled && attachment != null) {
-                    val attachScript = ExternalAIScripts.attachPhotoScript(provider, attachment)
-                    wv.evaluateJavascript(attachScript, null)
-                    delay(800L)
-                    val confirmScript = ExternalAIScripts.checkAttachmentConfirmedScript(provider)
-                    val confirmRes = suspendCancellableCoroutine<String?> { cont ->
-                        wv.evaluateJavascript(confirmScript) { cont.resume(it) }
-                    }
-                    if (ExternalAIScripts.parseAttachmentConfirmed(confirmRes)) {
-                        attachmentHandled = true
-                    }
-                }
-
-                if (attachmentHandled || attachment == null) {
+                if (attachmentHandled || attachments.isEmpty()) {
                     if (fillPrompt(wv, force = false)) {
                         delay(350L)
                         if (submitPromptWhenReady(wv, baselineCount)) {
@@ -587,9 +616,16 @@ fun ExternalAISurface(
                                 fontWeight = FontWeight.Bold,
                                 color = BrandTheme.labelPrimary(appearance)
                             )
-                            if (reason.detailText.isNotBlank()) {
+                            val detailText = if (
+                                reason == ExternalAIFallbackReason.ATTACHMENT_FAILED && attachments.isNotEmpty()
+                            ) {
+                                "화면의 첨부 버튼으로 사진 ${attachments.size}장을 모두 추가하면 이어서 자동으로 진행돼요."
+                            } else {
+                                reason.detailText
+                            }
+                            if (detailText.isNotBlank()) {
                                 Text(
-                                    reason.detailText,
+                                    detailText,
                                     fontSize = 12.sp,
                                     color = BrandTheme.labelSecondary(appearance)
                                 )
@@ -638,6 +674,7 @@ fun ExternalAISurface(
                                 javaScriptEnabled = true
                                 domStorageEnabled = true
                                 databaseEnabled = true
+                                setSupportMultipleWindows(true)
                                 loadWithOverviewMode = true
                                 useWideViewPort = true
                                 setSupportZoom(true)
@@ -726,8 +763,60 @@ fun ExternalAISurface(
                             }
 
                             webChromeClient = object : WebChromeClient() {
+                                override fun onShowFileChooser(
+                                    webView: WebView?,
+                                    filePathCallback: android.webkit.ValueCallback<Array<android.net.Uri>>,
+                                    fileChooserParams: FileChooserParams
+                                ): Boolean = nativeAttachmentBatch.handleFileChooser(filePathCallback, fileChooserParams)
+
                                 override fun onProgressChanged(view: WebView?, newProgress: Int) {
                                     pageProgress = newProgress / 100f
+                                }
+
+                                override fun onCreateWindow(
+                                    view: WebView?,
+                                    isDialog: Boolean,
+                                    isUserGesture: Boolean,
+                                    resultMsg: android.os.Message?
+                                ): Boolean {
+                                    if (!isUserGesture) return false
+                                    val target = view ?: return false
+                                    val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
+                                    popupWebViewRef?.destroy()
+                                    val popup = WebView(ctx).apply {
+                                        settings.apply {
+                                            javaScriptEnabled = true
+                                            domStorageEnabled = true
+                                            databaseEnabled = true
+                                            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                                            userAgentString = target.settings.userAgentString
+                                        }
+                                        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                                        webViewClient = object : WebViewClient() {
+                                            override fun shouldOverrideUrlLoading(
+                                                popupView: WebView?,
+                                                request: WebResourceRequest?
+                                            ): Boolean {
+                                                val targetUrl = request?.url?.toString() ?: return true
+                                                if (targetUrl == "about:blank") return false
+                                                if (ExternalAISecurityPolicy.isAllowedUrl(targetUrl, provider)) {
+                                                    target.loadUrl(targetUrl)
+                                                } else {
+                                                    val message = "허용되지 않은 로그인 페이지예요."
+                                                    detectedErrorMessage = message
+                                                    onError(message)
+                                                }
+                                                popupView?.stopLoading()
+                                                popupView?.destroy()
+                                                if (popupWebViewRef === popupView) popupWebViewRef = null
+                                                return true
+                                            }
+                                        }
+                                    }
+                                    popupWebViewRef = popup
+                                    transport.webView = popup
+                                    resultMsg.sendToTarget()
+                                    return true
                                 }
                             }
 
@@ -745,6 +834,11 @@ fun ExternalAISurface(
 
     DisposableEffect(Unit) {
         onDispose {
+            popupWebViewRef?.let { popup ->
+                popup.stopLoading()
+                popup.destroy()
+            }
+            popupWebViewRef = null
             webViewRef?.let { wv ->
                 wv.stopLoading()
                 wv.destroy()
@@ -752,6 +846,208 @@ fun ExternalAISurface(
             webViewRef = null
         }
     }
+}
+
+/** Android WebView에 정규화된 사진을 작은 호출로 옮긴 뒤 한 번의 change 이벤트로 커밋한다. */
+internal suspend fun attachOrderedPhotosToProvider(
+    webView: WebView,
+    provider: DirectAIProvider,
+    attachments: List<ExternalAIAttachment>,
+    timings: ExternalAITimingProfile = ExternalAITimingProfile.DEFAULT
+): Boolean {
+    if (attachments.isEmpty()) return true
+    if (attachments.size !in 1..8) return false
+    val ordered = attachments.sortedBy { it.sourceIndex }
+    val deadline = System.currentTimeMillis() + timings.attachmentTimeoutMs
+    val baselineRaw = webView.evaluateForAIBI(
+        ExternalAIScripts.checkAttachmentConfirmedScript(provider, ordered.size)
+    )
+    val baselineCount = ExternalAIScripts.parseAttachmentPreviewCount(baselineRaw)
+    val expectedTotal = baselineCount + ordered.size
+    Log.d(
+        "AIBIAttachmentCount",
+        "provider=${provider.name} baseline=$baselineCount expected=$expectedTotal"
+    )
+
+    // ChatGPT may expose a hydrated image input before its attachment menu is opened. Prefer it
+    // when available; otherwise open the nested `+ -> Photos` flow without promoting the hidden
+    // browser above the opaque host surface.
+    var observedCount = baselineCount
+    while (observedCount < expectedTotal && System.currentTimeMillis() < deadline) {
+        val directInputOpened = if (provider == DirectAIProvider.OPEN_AI) {
+            var target = ExternalAIScripts.parseSubmitPoint(
+                webView.evaluateForAIBI(ExternalAIScripts.attachmentImageInputTargetScript(provider))
+            )
+            if (target != null) {
+                webView.requestFocusFromTouch()
+                webView.dispatchTrustedTap(target)
+            } else {
+                // Opening ChatGPT's ordinary plus control does not itself invoke a privileged
+                // file operation, so the DOM click is safe here. The resulting Photos action
+                // is then activated with the trusted Android touch required by WebChromeClient.
+                webView.evaluateForAIBI(ExternalAIScripts.openAttachmentTriggerScript(provider))
+                delay(350L)
+                target = ExternalAIScripts.parseSubmitPoint(
+                    webView.evaluateForAIBI(ExternalAIScripts.attachmentMenuActionTargetScript(provider))
+                )
+                if (target != null) {
+                    webView.requestFocusFromTouch()
+                    webView.dispatchTrustedTap(target)
+                }
+            }
+            Log.d(
+                "AIBIDirectAttachment",
+                "provider=${provider.name} inputFound=${target != null} trusted=${target != null}"
+            )
+            target != null
+        } else {
+            false
+        }
+
+        // Other providers, and future ChatGPT pages without the direct image input, retain the
+        // trusted native-touch path because some sites reject HTMLElement.click().
+        // Navigation can finish before the provider hydrates its attachment portal. Keep the
+        // browser hidden and retry instead of exposing the visible fallback immediately.
+        if (!directInputOpened && !webView.openAttachmentChooserWithTrustedTouch(provider)) {
+            delay(timings.attachmentCadenceMs)
+            continue
+        }
+        val previousCount = observedCount
+        val nativePreviewWaitMs = if (provider == DirectAIProvider.GEMINI) 20_000L else 6_000L
+        val nativeStepDeadline = minOf(deadline, System.currentTimeMillis() + nativePreviewWaitMs)
+        var lastLoggedCount = observedCount
+        while (System.currentTimeMillis() < nativeStepDeadline) {
+            val state = webView.evaluateForAIBI(
+                ExternalAIScripts.checkAttachmentConfirmedScript(provider, expectedTotal)
+            )
+            observedCount = ExternalAIScripts.parseAttachmentPreviewCount(state)
+            if (observedCount != lastLoggedCount) {
+                Log.d(
+                    "AIBIAttachmentCount",
+                    "provider=${provider.name} observed=$observedCount expected=$expectedTotal"
+                )
+                lastLoggedCount = observedCount
+            }
+            if (observedCount == expectedTotal) return true
+            if (observedCount > previousCount) break
+            delay(timings.attachmentCadenceMs)
+        }
+        if (observedCount <= previousCount) break
+    }
+
+    // Keep the standard DataTransfer path as a provider-compatible fallback.
+    var inputReady = false
+    while (!inputReady && System.currentTimeMillis() < deadline) {
+        val raw = webView.evaluateForAIBI(ExternalAIScripts.prepareAttachmentInputScript(provider))
+        inputReady = ExternalAIScripts.parseAttachmentResult(raw).inputFound
+        if (!inputReady) delay(timings.attachmentCadenceMs)
+    }
+    if (!inputReady) return false
+
+    val begun = ExternalAIScripts.parseAttachmentResult(
+        webView.evaluateForAIBI(ExternalAIScripts.beginAttachmentBatchScript(ordered.size))
+    )
+    if (!begun.success) return false
+    for ((index, attachment) in ordered.withIndex()) {
+        val appended = ExternalAIScripts.parseAttachmentResult(
+            webView.evaluateForAIBI(ExternalAIScripts.appendAttachmentToBatchScript(attachment))
+        )
+        if (!appended.success || appended.acceptedCount != index + 1) return false
+    }
+    val committed = ExternalAIScripts.parseAttachmentResult(
+        webView.evaluateForAIBI(ExternalAIScripts.commitAttachmentBatchScript(provider))
+    )
+    if (!committed.success || committed.acceptedCount != ordered.size) return false
+
+    while (System.currentTimeMillis() < deadline) {
+        val raw = webView.evaluateForAIBI(
+            ExternalAIScripts.checkAttachmentConfirmedScript(provider, ordered.size)
+        )
+        if (ExternalAIScripts.parseAttachmentConfirmed(raw)) {
+            Log.d(
+                "AIBIAttachmentCount",
+                "provider=${provider.name} observed=${ordered.size} expected=${ordered.size} path=data-transfer"
+            )
+            return true
+        }
+        delay(timings.attachmentCadenceMs)
+    }
+    return false
+}
+
+private suspend fun WebView.evaluateForAIBI(script: String): String? =
+    suspendCancellableCoroutine { continuation ->
+        evaluateJavascript(script) { result ->
+            if (continuation.isActive) continuation.resume(result)
+        }
+    }
+
+private suspend fun WebView.openAttachmentChooserWithTrustedTouch(
+    provider: DirectAIProvider
+): Boolean {
+    (context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+        ?.hideSoftInputFromWindow(windowToken, 0)
+    requestFocusFromTouch()
+    delay(350L)
+    var menuPoint = ExternalAIScripts.parseSubmitPoint(
+        evaluateForAIBI(ExternalAIScripts.attachmentMenuActionTargetScript(provider))
+    )
+    if (menuPoint == null) {
+        val triggerPoint = ExternalAIScripts.parseSubmitPoint(
+            evaluateForAIBI(ExternalAIScripts.attachmentTriggerTargetScript(provider))
+        ) ?: return false
+        dispatchTrustedTap(triggerPoint)
+        // Give Gemini's animated sheet uninterrupted render windows. Rapid JS polling can
+        // keep its portal from laying out until polling stops on some Samsung builds.
+        val menuDiscoveryAttempts = when (provider) {
+            DirectAIProvider.GEMINI -> 5
+            DirectAIProvider.OPEN_AI -> 8
+            else -> 6
+        }
+        for (attempt in 0 until menuDiscoveryAttempts) {
+            delay(
+                when (provider) {
+                    DirectAIProvider.GEMINI -> 1_000L
+                    DirectAIProvider.OPEN_AI -> 500L
+                    else -> 150L
+                }
+            )
+            menuPoint = ExternalAIScripts.parseSubmitPoint(
+                evaluateForAIBI(ExternalAIScripts.attachmentMenuActionTargetScript(provider))
+            )
+            if (menuPoint != null) {
+                Log.d("AIBIMenuTarget", "provider=${provider.name} attempt=${attempt + 1}")
+                break
+            }
+        }
+        // A direct file trigger has already invoked WebChromeClient when no nested menu appears.
+        if (menuPoint == null) {
+            Log.d("AIBIMenuTarget", "provider=${provider.name} not-found attempts=$menuDiscoveryAttempts")
+            return true
+        }
+    }
+    dispatchTrustedTap(menuPoint)
+    return true
+}
+
+private suspend fun WebView.dispatchTrustedTap(point: Pair<Float, Float>) {
+    val x = point.first * width
+    val y = point.second * height
+    val downTime = SystemClock.uptimeMillis()
+    val downConsumed = MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, x, y, 0).let {
+        it.source = InputDevice.SOURCE_TOUCHSCREEN
+        val consumed = dispatchTouchEvent(it)
+        it.recycle()
+        consumed
+    }
+    delay(80L)
+    val upConsumed = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, x, y, 0).let {
+        it.source = InputDevice.SOURCE_TOUCHSCREEN
+        val consumed = dispatchTouchEvent(it)
+        it.recycle()
+        consumed
+    }
+    Log.d("AIBITrustedTouch", "x=${point.first} y=${point.second} down=$downConsumed up=$upConsumed")
 }
 
 private fun statusSubtitleText(

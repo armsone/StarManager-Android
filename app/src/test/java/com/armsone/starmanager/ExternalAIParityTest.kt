@@ -5,7 +5,9 @@ import com.armsone.starmanager.ui.composer.AIChoice
 import com.armsone.starmanager.ui.composer.CaptionSource
 import com.armsone.starmanager.ui.composer.captionSource
 import com.armsone.starmanager.ui.externalai.ExternalAIAnswerCleaner
+import com.armsone.starmanager.ui.externalai.ExternalAIAttachment
 import com.armsone.starmanager.ui.externalai.ExternalAIFallbackReason
+import com.armsone.starmanager.ui.externalai.ExternalAIImageNormalizationPolicy
 import com.armsone.starmanager.ui.externalai.ExternalAIInjectionResult
 import com.armsone.starmanager.ui.externalai.ExternalAIPollResult
 import com.armsone.starmanager.ui.externalai.ExternalAIScripts
@@ -78,6 +80,8 @@ class ExternalAIParityTest {
         assertEquals(35_000L, timings.readinessTimeoutMs)
         assertEquals(700L, timings.readinessCadenceMs)
         assertEquals(12, timings.maxReadinessMisses)
+        assertEquals(30_000L, timings.attachmentTimeoutMs)
+        assertEquals(350L, timings.attachmentCadenceMs)
         assertEquals(15_000L, timings.submitTimeoutMs)
         assertEquals(500L, timings.submitCadenceMs)
         assertEquals(700L, timings.submitVerificationDelayMs)
@@ -159,6 +163,49 @@ class ExternalAIParityTest {
         """.trimIndent()
 
         assertEquals(expected, ExternalAIAnswerCleaner.clean(raw))
+    }
+
+    @Test
+    fun `답변 정리기는 Gemini 글자 수 검산 코드 대신 마지막 Text 결과만 남긴다`() {
+        val raw = """
+            먼저 만든 초안 문구
+
+            print("Length with spaces:", len(text))
+            print("Text:\n" + text)
+
+            Length with spaces: 103
+            Length without newlines: 100
+            Text:
+            #함께한순간 #맛있는기억
+            바삭한 한입에 웃음이 번진다.
+            🍜 오늘의 온기를 오래 간직하자 🍜
+        """.trimIndent()
+
+        val expected = """
+            #함께한순간 #맛있는기억
+            바삭한 한입에 웃음이 번진다.
+            🍜 오늘의 온기를 오래 간직하자 🍜
+        """.trimIndent()
+
+        assertEquals(expected, ExternalAIAnswerCleaner.clean(raw, DirectAIProvider.GEMINI))
+    }
+
+    @Test
+    fun `답변 정리기는 Gemini 검산 코드의 triple quoted draft 본문만 남긴다`() {
+        val raw = listOf(
+            "def check_len(text):",
+            "    print(len(text))",
+            "    print(\"--- Text ---\")",
+            "    print(text)",
+            "",
+            "draft = \"\"\"#최종 #문안",
+            "검증된 본문입니다.",
+            "문안의 끝입니다.\"\"\"",
+            "check_len(draft)",
+        ).joinToString("\n")
+
+        val expected = "#최종 #문안\n검증된 본문입니다.\n문안의 끝입니다."
+        assertEquals(expected, ExternalAIAnswerCleaner.clean(raw, DirectAIProvider.GEMINI))
     }
 
     @Test
@@ -246,6 +293,71 @@ class ExternalAIParityTest {
         assertTrue(script.contains("JSON.stringify"))
         assertTrue(script.contains("isLoggedIn"))
         assertTrue(script.contains("hasChallenge"))
+    }
+
+    @Test
+    fun `사진 배치 규격은 최대 8장과 정규화 상한을 고정한다`() {
+        val policy = ExternalAIImageNormalizationPolicy()
+        assertEquals(8, policy.maximumImageCount)
+        assertEquals(2_048, policy.maximumLongEdgePixels)
+        assertEquals(2_000_000, policy.maximumBytesPerImage)
+        assertEquals(84, policy.initialJpegQuality)
+    }
+
+    @Test
+    fun `Gemini 첨부 준비는 중첩 파일 메뉴를 찾고 누른다`() {
+        val script = ExternalAIScripts.prepareAttachmentInputScript(DirectAIProvider.GEMINI)
+        assertTrue(script.contains("업로드 및 도구"))
+        assertTrue(script.contains("menu-action"))
+        assertTrue(script.contains("Upload from device"))
+        assertTrue(script.contains("inputFound"))
+        assertTrue(script.contains("__sm_attachment_file_action_selected"))
+        assertTrue(script.contains("[mat-menu-item]"))
+        assertTrue(script.contains(",div,span"))
+
+        val nativePanel = ExternalAIScripts.openAttachmentPanelScript(DirectAIProvider.GEMINI)
+        assertTrue(nativePanel.contains("input.click()"))
+        assertTrue(nativePanel.contains("native-file-panel"))
+
+        val nativeMenuTarget = ExternalAIScripts.attachmentMenuActionTargetScript(DirectAIProvider.GEMINI)
+        assertTrue(nativeMenuTarget.contains("uploader-images-files-button-advanced"))
+        assertTrue(nativeMenuTarget.contains("x:(r.left+r.width/2)/window.innerWidth"))
+    }
+
+    @Test
+    fun `사진은 작은 브리지 호출로 쌓은 뒤 한 이벤트로 원자적 커밋한다`() {
+        val attachment = ExternalAIAttachment(
+            data = byteArrayOf(1, 2, 3),
+            filename = "aibi-08.jpg",
+            sourceIndex = 7
+        )
+        val begin = ExternalAIScripts.beginAttachmentBatchScript(8)
+        val commit = ExternalAIScripts.commitAttachmentBatchScript(DirectAIProvider.OPEN_AI)
+        val confirm = ExternalAIScripts.checkAttachmentConfirmedScript(DirectAIProvider.OPEN_AI, 8)
+
+        assertTrue(begin.contains("expectedCount: count"))
+        assertEquals("aibi-08.jpg", attachment.filename)
+        assertEquals(7, attachment.sourceIndex)
+        assertTrue(commit.contains("batch.files.length !== batch.expectedCount"))
+        assertTrue(commit.contains("new DataTransfer"))
+        assertTrue(commit.contains("input.dispatchEvent(new Event('change'"))
+        assertTrue(confirm.contains("maximumVisibleCount === 8"))
+    }
+
+    @Test
+    fun `첨부 결과 파서는 입력 준비와 정확한 누적 수를 보존한다`() {
+        val ready = ExternalAIScripts.parseAttachmentResult(
+            "\"{\\\"success\\\":true,\\\"inputFound\\\":true,\\\"acceptedCount\\\":8}\""
+        )
+        assertTrue(ready.success)
+        assertTrue(ready.inputFound)
+        assertEquals(8, ready.acceptedCount)
+        assertEquals(
+            5,
+            ExternalAIScripts.parseAttachmentPreviewCount(
+                "\"{\\\"confirmed\\\":false,\\\"previewCount\\\":5}\""
+            )
+        )
     }
 
     @Test
@@ -433,6 +545,7 @@ class ExternalAIParityTest {
         assertEquals("확인 중", com.armsone.starmanager.ui.externalai.ExternalAIAuthState.CHECKING.label)
         assertEquals("로그인됨", com.armsone.starmanager.ui.externalai.ExternalAIAuthState.LOGGED_IN.label)
         assertEquals("로그인 필요", com.armsone.starmanager.ui.externalai.ExternalAIAuthState.REQUIRES_LOGIN.label)
+        assertEquals("확인 안 됨", com.armsone.starmanager.ui.externalai.ExternalAIAuthState.UNKNOWN.label)
 
         assertTrue(com.armsone.starmanager.ui.externalai.ExternalAIAuthState.CHECKING.isChecking)
         assertTrue(com.armsone.starmanager.ui.externalai.ExternalAIAuthState.LOGGED_IN.isLoggedIn)
@@ -461,13 +574,79 @@ class ExternalAIParityTest {
             requireVisible = false
         )
         assertTrue(backgroundOpenAIScript.contains("var requireVisible = false"))
-        assertTrue(backgroundOpenAIScript.indexOf("hasPositiveEvidence") < backgroundOpenAIScript.indexOf("var loginEl"))
+        assertTrue(backgroundOpenAIScript.indexOf("var loginEl") < backgroundOpenAIScript.indexOf("hasPositiveEvidence"))
 
         val geminiScript = ExternalAIScripts.checkAuthStatusScript(DirectAIProvider.GEMINI)
-        assertTrue(geminiScript.contains("ql-editor") || geminiScript.contains("rich-textarea"))
+        assertTrue(geminiScript.contains("rich-textarea"))
 
         val claudeScript = ExternalAIScripts.checkAuthStatusScript(DirectAIProvider.CLAUDE)
-        assertTrue(claudeScript.contains("ProseMirror"))
+        assertTrue(claudeScript.contains("user-menu-button"))
+    }
+
+    @Test
+    fun `Claude 인증 마커는 일반 ProseMirror나 contenteditable 요소를 포함하지 않아 오판정을 방지한다`() {
+        val script = ExternalAIScripts.checkAuthStatusScript(DirectAIProvider.CLAUDE)
+        val authMarkersIndex = script.indexOf("var authMarkerSelectors =")
+        val requireVisibleIndex = script.indexOf("var requireVisible =")
+        val authMarkersJson = script.substring(authMarkersIndex, requireVisibleIndex)
+        assertFalse(authMarkersJson.contains("ProseMirror"))
+        assertFalse(authMarkersJson.contains("contenteditable"))
+        assertFalse(authMarkersJson.contains("chat-input-send-button"))
+        assertFalse(authMarkersJson.contains("href*='/chats'"))
+        assertTrue(authMarkersJson.contains("user-menu-button"))
+    }
+
+    @Test
+    fun `ChatGPT 및 Grok 인증 마커는 비로그인 상태의 공용 텍스트영역을 포함하지 않는다`() {
+        val chatGptScript = ExternalAIScripts.checkAuthStatusScript(DirectAIProvider.OPEN_AI)
+        val chatGptAuthIdx = chatGptScript.indexOf("var authMarkerSelectors =")
+        val chatGptVisIdx = chatGptScript.indexOf("var requireVisible =")
+        val chatGptAuthJson = chatGptScript.substring(chatGptAuthIdx, chatGptVisIdx)
+        assertFalse(chatGptAuthJson.contains("#prompt-textarea"))
+        assertFalse(chatGptAuthJson.contains("composer-speech-button"))
+        assertFalse(chatGptAuthJson.contains("Chat history"))
+        assertTrue(chatGptAuthJson.contains("profile-button") || chatGptAuthJson.contains("user-menu-button"))
+
+        val geminiScript = ExternalAIScripts.checkAuthStatusScript(DirectAIProvider.GEMINI)
+        val geminiAuthIdx = geminiScript.indexOf("var authMarkerSelectors =")
+        val geminiVisIdx = geminiScript.indexOf("var requireVisible =")
+        val geminiAuthJson = geminiScript.substring(geminiAuthIdx, geminiVisIdx)
+        assertFalse(geminiAuthJson.contains("rich-textarea"))
+        assertFalse(geminiAuthJson.contains("bard-mode-switcher"))
+        assertFalse(geminiAuthJson.contains("ServiceLogin"))
+        assertTrue(geminiAuthJson.contains("SignOutOptions"))
+        assertTrue(geminiAuthJson.contains("Google Account") || geminiAuthJson.contains("user-menu-button"))
+
+        val geminiLoginIndex = geminiScript.indexOf("var loginSelectors =")
+        val geminiChallengeIndex = geminiScript.indexOf("var challengeSelectors =")
+        val geminiLoginJson = geminiScript.substring(geminiLoginIndex, geminiChallengeIndex)
+        assertTrue(geminiLoginJson.contains("ServiceLogin"))
+        assertTrue(geminiLoginJson.contains("InteractiveLogin"))
+        assertFalse(geminiLoginJson.contains("a[href*='accounts.google.com']"))
+
+        assertTrue(chatGptAuthJson.contains("accounts-profile-button"))
+
+        val grokScript = ExternalAIScripts.checkAuthStatusScript(DirectAIProvider.GROK)
+        val grokAuthIdx = grokScript.indexOf("var authMarkerSelectors =")
+        val grokVisIdx = grokScript.indexOf("var requireVisible =")
+        val grokAuthJson = grokScript.substring(grokAuthIdx, grokVisIdx)
+        assertFalse(grokAuthJson.contains("\"textarea\""))
+        assertTrue(grokAuthJson.contains("user-menu-button"))
+    }
+
+    @Test
+    fun `인증 상태 확인 스크립트는 가시성 요구를 기본 활성화하고 챌린지 및 로그인 검사를 우선한다`() {
+        val script = ExternalAIScripts.checkAuthStatusScript(DirectAIProvider.CLAUDE, requireVisible = true)
+        assertTrue(script.contains("var requireVisible = true"))
+        assertTrue(script.contains("style.display === 'none'"))
+        assertTrue(script.contains("style.visibility === 'hidden'"))
+        assertTrue(script.contains("offsetWidth > 0 || el.offsetHeight > 0"))
+
+        val challengePos = script.indexOf("challengeEl")
+        val loginPos = script.indexOf("loginEl")
+        val positivePos = script.indexOf("hasPositiveEvidence")
+        assertTrue("챌린지 검사가 로그인 검사보다 선행해야 함", challengePos < loginPos)
+        assertTrue("로그인 검사가 긍정 인증 확정보다 선행해야 함", loginPos < positivePos)
     }
 
     @Test

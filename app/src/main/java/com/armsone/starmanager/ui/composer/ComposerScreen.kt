@@ -8,7 +8,6 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.os.Environment
@@ -21,6 +20,7 @@ import android.view.MotionEvent
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.webkit.CookieManager
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
@@ -171,6 +171,7 @@ import com.armsone.starmanager.service.DirectAIProvider
 import com.armsone.starmanager.ui.externalai.ExternalAIAttachment
 import com.armsone.starmanager.ui.externalai.ExternalAIAutomationPhase
 import com.armsone.starmanager.ui.externalai.ExternalAIErrorSanitizer
+import com.armsone.starmanager.ui.externalai.ExternalAINativeAttachmentBatch
 import com.armsone.starmanager.ui.externalai.ExternalAIFallbackClassifier
 import com.armsone.starmanager.ui.externalai.ExternalAIFallbackReason
 import com.armsone.starmanager.ui.externalai.ExternalAIPollResult
@@ -182,6 +183,7 @@ import com.armsone.starmanager.ui.externalai.ExternalAISurface
 import com.armsone.starmanager.ui.externalai.ExternalAISurfaceMode
 import com.armsone.starmanager.ui.externalai.ExternalAITimerFormatter
 import com.armsone.starmanager.ui.externalai.ExternalAITimingProfile
+import com.armsone.starmanager.ui.externalai.attachOrderedPhotosToProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -1013,7 +1015,7 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
         HiddenExternalAIWebView(
             provider = automationProvider,
             prompt = viewModel.externalPrompt(),
-            attachment = state.activeAttachment,
+            attachments = state.activeAttachments,
             requestId = state.automationRequestId,
             onSubmitted = {
                 viewModel.onAutomationSubmitted()
@@ -1041,7 +1043,7 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
             mode = ExternalAISurfaceMode.GENERATION,
             fallbackReason = state.fallbackReason,
             prompt = viewModel.externalPrompt(),
-            attachment = state.activeAttachment,
+            attachments = state.activeAttachments,
             onClose = {
                 if (showsExternalAIBrowser) {
                     if (viewModel.state.value.isGenerating) {
@@ -1143,7 +1145,7 @@ private fun GenerationStatusCard(
 private fun HiddenExternalAIWebView(
     provider: DirectAIProvider,
     prompt: String,
-    attachment: ExternalAIAttachment? = null,
+    attachments: List<ExternalAIAttachment> = emptyList(),
     requestId: Int,
     onSubmitted: () -> Unit,
     onFallbackRequired: (ExternalAIFallbackReason) -> Unit,
@@ -1153,15 +1155,37 @@ private fun HiddenExternalAIWebView(
     val context = LocalContext.current
     var webViewRef by remember(requestId) { mutableStateOf<WebView?>(null) }
     var isAutomationActive by remember(requestId) { mutableStateOf(true) }
+    var nativeAttachmentBatch by remember(requestId) { mutableStateOf(ExternalAINativeAttachmentBatch.EMPTY) }
+    var nativeAttachmentPreparationFailed by remember(requestId) { mutableStateOf(false) }
     val timings = ExternalAITimingProfile.DEFAULT
+
+    LaunchedEffect(requestId, attachments) {
+        nativeAttachmentPreparationFailed = false
+        runCatching {
+            withContext(Dispatchers.IO) {
+                ExternalAINativeAttachmentBatch.prepare(context, attachments)
+            }
+        }.onSuccess {
+            nativeAttachmentBatch = it
+        }.onFailure {
+            nativeAttachmentPreparationFailed = true
+        }
+    }
+    val batchForDisposal = nativeAttachmentBatch
+    DisposableEffect(batchForDisposal) {
+        onDispose { batchForDisposal.dispose() }
+    }
 
     DisposableEffect(requestId, provider) {
         val hostView = context.findActivity()?.window?.decorView as? ViewGroup
         val density = context.resources.displayMetrics.density
         val wv = WebView(context).apply {
             alpha = 0.001f
-            isClickable = false
-            isFocusable = false
+            // It is behind the opaque Compose surface and cannot intercept the user's touch,
+            // but trusted programmatic taps must still reach hydrated provider controls.
+            isClickable = true
+            isFocusable = true
+            isFocusableInTouchMode = true
             importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
             settings.apply {
                 javaScriptEnabled = true
@@ -1227,17 +1251,32 @@ private fun HiddenExternalAIWebView(
                     }
                 }
             }
+            webChromeClient = object : WebChromeClient() {
+                override fun onShowFileChooser(
+                    webView: WebView?,
+                    filePathCallback: android.webkit.ValueCallback<Array<android.net.Uri>>,
+                    fileChooserParams: FileChooserParams
+                ): Boolean = nativeAttachmentBatch.handleFileChooser(filePathCallback, fileChooserParams)
+            }
         }
 
+        val referenceWidth = (412 * density).toInt()
+        val referenceHeight = (892 * density).toInt()
+        val availableWidth = hostView?.width?.takeIf { it > 0 }
+            ?: context.resources.displayMetrics.widthPixels
+        val availableHeight = hostView?.height?.takeIf { it > 0 }
+            ?: context.resources.displayMetrics.heightPixels
         val lp = FrameLayout.LayoutParams(
-            (412 * density).toInt(),
-            (892 * density).toInt()
+            minOf(referenceWidth, availableWidth),
+            minOf(referenceHeight, availableHeight)
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            setMargins(-10000, -10000, 0, 0)
+            setMargins(0, 0, 0, 0)
         }
 
-        hostView?.addView(wv, lp)
+        // Keep the browser in the real on-screen layout so provider portals fully hydrate and
+        // native file gestures work, but place it behind the opaque app surface.
+        hostView?.addView(wv, 0, lp)
         webViewRef = wv
         wv.loadUrl(provider.url)
 
@@ -1250,12 +1289,20 @@ private fun HiddenExternalAIWebView(
         }
     }
 
-    LaunchedEffect(requestId, provider) {
+    LaunchedEffect(requestId, provider, nativeAttachmentBatch.uris.size, nativeAttachmentPreparationFailed) {
+        if (nativeAttachmentPreparationFailed) {
+            isAutomationActive = false
+            onFallbackRequired(ExternalAIFallbackReason.ATTACHMENT_FAILED)
+            return@LaunchedEffect
+        }
+        if (attachments.isNotEmpty() && nativeAttachmentBatch.uris.size != attachments.size) return@LaunchedEffect
+        nativeAttachmentBatch.resetDelivery()
         val wv = webViewRef ?: return@LaunchedEffect
         val startTime = System.currentTimeMillis()
         var baselineCaptured = false
         var baselineCount = 0
-        var attachmentHandled = (attachment == null)
+        var attachmentHandled = attachments.isEmpty()
+        var attachmentAttempted = attachments.isEmpty()
         var promptInjected = false
         var promptSubmitted = false
 
@@ -1270,23 +1317,22 @@ private fun HiddenExternalAIWebView(
                     baselineCaptured = true
                 }
 
-                if (!attachmentHandled && attachment != null) {
-                    val attachScript = ExternalAIScripts.attachPhotoScript(provider, attachment)
-                    wv.evaluateJavascript(attachScript, null)
-                    delay(800L)
-                    val confirmScript = ExternalAIScripts.checkAttachmentConfirmedScript(provider)
-                    val confirmRes = suspendCancellableCoroutine<String?> { cont ->
-                        wv.evaluateJavascript(confirmScript) { cont.resume(it) }
-                    }
-                    if (ExternalAIScripts.parseAttachmentConfirmed(confirmRes)) {
-                        attachmentHandled = true
+                if (!attachmentHandled && !attachmentAttempted) {
+                    attachmentAttempted = true
+                    attachmentHandled = attachOrderedPhotosToProvider(wv, provider, attachments, timings)
+                    dismissHiddenAIBIKeyboard(context, wv)
+                    if (!attachmentHandled) {
+                        isAutomationActive = false
+                        onFallbackRequired(ExternalAIFallbackReason.ATTACHMENT_FAILED)
+                        return@LaunchedEffect
                     }
                 }
 
-                if ((attachmentHandled || attachment == null) && !promptInjected) {
+                if ((attachmentHandled || attachments.isEmpty()) && !promptInjected) {
                     val injectRes = suspendCancellableCoroutine<String?> { cont ->
                         wv.evaluateJavascript(ExternalAIScripts.injectPromptScript(provider, prompt, force = false)) { cont.resume(it) }
                     }
+                    dismissHiddenAIBIKeyboard(context, wv)
                     val injection = ExternalAIScripts.parseInjectionResult(injectRes)
                     if (injection.success && injection.inputFound) {
                         promptInjected = true
@@ -1298,10 +1344,12 @@ private fun HiddenExternalAIWebView(
                     val submitRes = suspendCancellableCoroutine<String?> { cont ->
                         wv.evaluateJavascript(ExternalAIScripts.submitPromptScript(provider, 1)) { cont.resume(it) }
                     }
+                    dismissHiddenAIBIKeyboard(context, wv)
                     delay(700L)
                     val verifyRes = suspendCancellableCoroutine<String?> { cont ->
                         wv.evaluateJavascript(ExternalAIScripts.verifySubmissionScript(provider, baselineCount)) { cont.resume(it) }
                     }
+                    dismissHiddenAIBIKeyboard(context, wv)
                     if (ExternalAIScripts.parseSubmissionVerified(verifyRes)) {
                         promptSubmitted = true
                         onSubmitted()
@@ -1344,6 +1392,29 @@ private fun HiddenExternalAIWebView(
             }
         }
     }
+}
+
+private fun dismissHiddenAIBIKeyboard(context: Context, webView: WebView) {
+    fun dismissNow() {
+        if (!webView.isAttachedToWindow) return
+        webView.evaluateJavascript(
+            "if(document.activeElement&&document.activeElement.blur){document.activeElement.blur();}",
+            null
+        )
+        webView.clearFocus()
+        val activity = context.findActivity()
+        activity?.currentFocus?.clearFocus()
+        val inputMethodManager = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        inputMethodManager?.hideSoftInputFromWindow(webView.windowToken, 0)
+        activity?.window?.decorView?.windowToken?.let { token ->
+            inputMethodManager?.hideSoftInputFromWindow(token, 0)
+        }
+    }
+
+    dismissNow()
+    // WebView can enqueue the IME show request just after evaluateJavascript returns. Closing it
+    // once more on the next input-method frame prevents a brief or persistent keyboard takeover.
+    webView.postDelayed({ dismissNow() }, 120L)
 }
 
 // MARK: - 미디어 순서 편집기
@@ -1467,16 +1538,7 @@ private fun MediaThumbnail(media: ComposerMedia) {
     val appearance = LocalAppAppearance.current
     val isBk = appearance == AppAppearance.BK
     val shape = RoundedCornerShape(14.dp)
-    val imageBitmap by produceState<android.graphics.Bitmap?>(initialValue = null, media.id) {
-        value = withContext(Dispatchers.IO) {
-            when (media.kind) {
-                MediaKind.IMAGE -> runCatching {
-                    BitmapFactory.decodeByteArray(media.data, 0, media.data.size)
-                }.getOrNull()
-                MediaKind.VIDEO -> makeVideoThumbnail(media, context.cacheDir)
-            }
-        }
-    }
+    val imageBitmap = rememberMediaBitmap(media, maximumLongEdgePixels = 320, lowMemory = true, context = context)
     Box(
         Modifier
             .size(width = 104.dp, height = 118.dp)
@@ -1520,7 +1582,19 @@ private fun makeVideoThumbnail(media: ComposerMedia, cacheDir: File): android.gr
         retriever.setDataSource(file.path)
         val frame = retriever.getFrameAtTime(0)
         retriever.release()
-        frame
+        if (frame == null || maxOf(frame.width, frame.height) <= 320) {
+            frame
+        } else {
+            val ratio = 320f / maxOf(frame.width, frame.height).toFloat()
+            val smaller = android.graphics.Bitmap.createScaledBitmap(
+                frame,
+                maxOf(1, (frame.width * ratio).toInt()),
+                maxOf(1, (frame.height * ratio).toInt()),
+                true
+            )
+            if (smaller !== frame) frame.recycle()
+            smaller
+        }
     } catch (_: Exception) {
         null
     } finally {
@@ -1608,11 +1682,12 @@ private fun MediaPreview(items: List<ComposerMedia>, aspect: Float, isLoading: B
                     val media = items[page]
                     Box(Modifier.fillMaxSize()) {
                         if (media.kind == MediaKind.IMAGE) {
-                            val bitmap = remember(media.id) {
-                                runCatching {
-                                    BitmapFactory.decodeByteArray(media.data, 0, media.data.size)
-                                }.getOrNull()
-                            }
+                            val bitmap = rememberMediaBitmap(
+                                media = media,
+                                maximumLongEdgePixels = 1_400,
+                                lowMemory = false,
+                                context = LocalContext.current
+                            )
                             if (bitmap != null) {
                                 Image(
                                     bitmap = bitmap.asImageBitmap(),
@@ -1665,6 +1740,37 @@ private fun MediaPreview(items: List<ComposerMedia>, aspect: Float, isLoading: B
             }
         }
     }
+}
+
+@Composable
+private fun rememberMediaBitmap(
+    media: ComposerMedia,
+    maximumLongEdgePixels: Int,
+    lowMemory: Boolean,
+    context: Context
+): android.graphics.Bitmap? {
+    val bitmap by produceState<android.graphics.Bitmap?>(
+        initialValue = null,
+        media.id,
+        maximumLongEdgePixels,
+        lowMemory
+    ) {
+        value = withContext(Dispatchers.IO) {
+            when (media.kind) {
+                MediaKind.IMAGE -> runCatching {
+                    ComposerImagePipeline.decodeForDisplay(
+                        source = media.data,
+                        maximumLongEdgePixels = maximumLongEdgePixels,
+                        lowMemory = lowMemory
+                    )
+                }.getOrNull()
+                MediaKind.VIDEO -> makeVideoThumbnail(media, context.cacheDir)
+            }
+        }
+    }
+    // Compose may retain the painter for an additional display-list frame after disposal.
+    // The decoded bitmap is already bounded, so let GC own its lifetime instead of recycling it.
+    return bitmap
 }
 
 private fun sourceIcon(source: CaptionSource): ImageVector = when (source) {
