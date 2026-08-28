@@ -48,7 +48,7 @@ class ExternalAIParityTest {
     }
 
     @Test
-    fun `AIChoice 순서와 기기 AI 표기가 정확하다`() {
+    fun `AIChoice 순서와 AI 표기가 정확하다`() {
         val choices = AIChoice.all
         assertEquals(4, choices.size)
         assertEquals("gemini", choices[0].id)
@@ -61,7 +61,7 @@ class ExternalAIParityTest {
         assertEquals("Claude", choices[2].title)
 
         assertEquals("device-ai", choices[3].id)
-        assertEquals("기기 AI", choices[3].title)
+        assertEquals("AI", choices[3].title)
     }
 
     @Test

@@ -35,6 +35,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -61,6 +64,12 @@ fun StarSegmentedControl(
     val containerBackground = if (isBk) Color(0xFFE8EBF0) else Color(0x1F767680)
     val containerBorder = if (isBk) BorderStroke(0.6.dp, BrandTheme.bkChromeHairline) else null
 
+    val fontSize = when {
+        options.size >= 5 -> 12.sp
+        options.size == 4 -> 12.5.sp
+        else -> 13.sp
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -86,12 +95,16 @@ fun StarSegmentedControl(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) { onSelect(index) }
+                    .semantics {
+                        contentDescription = option
+                        this.selected = selected
+                    }
                     .testTag("segment.$option"),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = option,
-                    fontSize = 13.sp,
+                    fontSize = fontSize,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (selected) {
                         if (isBk) BrandTheme.bkLabelPrimary else BrandTheme.labelPrimary
@@ -99,7 +112,8 @@ fun StarSegmentedControl(
                         if (isBk) BrandTheme.bkLabelSecondary else BrandTheme.labelSecondary
                     },
                     textAlign = TextAlign.Center,
-                    maxLines = 1
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
         }

@@ -14,7 +14,7 @@ data class GeneratedPost(
     val callToAction: String,
     val hashtags: List<String>,
     val composedText: String,
-    val targetCharacterCount: Int? = 200,
+    val targetCharacterCount: Int? = null,
     val destinationCharacterLimit: Int? = null,
     val id: String = UUID.randomUUID().toString(),
     val createdAt: Long = System.currentTimeMillis()
@@ -27,7 +27,7 @@ data class GeneratedPost(
             callToAction: String,
             hashtags: List<String>,
             composedText: String? = null,
-            targetCharacterCount: Int = 200,
+            targetCharacterCount: Int? = null,
             destinationCharacterLimit: Int? = null,
             id: String = UUID.randomUUID().toString(),
             createdAt: Long = System.currentTimeMillis()
@@ -80,7 +80,7 @@ data class GeneratedPost(
     val characterCount: Int get() = Graphemes.count(composedText)
 
     val formatReport: CaptionFormatReport
-        get() = CaptionFormatReport.evaluate(composedText, destinationCharacterLimit ?: 2200)
+        get() = CaptionFormatReport.evaluate(composedText, destinationCharacterLimit ?: CaptionFormatReport.NEUTRAL_SAFETY_LIMIT)
 }
 
 /** 게시 기준 글자 수 한도 준수 검증 결과. iOS CaptionFormatReport 포팅. */
@@ -98,7 +98,9 @@ data class CaptionFormatReport(
     val requiredCharacterCount: Int get() = destinationLimit
 
     companion object {
-        fun evaluate(text: String, destinationLimit: Int = 2200): CaptionFormatReport {
+        const val NEUTRAL_SAFETY_LIMIT = 20_000
+
+        fun evaluate(text: String, destinationLimit: Int = NEUTRAL_SAFETY_LIMIT): CaptionFormatReport {
             val count = Graphemes.count(text)
             return CaptionFormatReport(
                 destinationLimit = destinationLimit,
@@ -112,14 +114,14 @@ data class CaptionFormatReport(
 /** 외부 AI에서 돌아온 원문을 개인 설정까지 포함해 검사하기 위한 문맥. */
 data class CaptionValidationContext(
     val destinationLimit: Int,
-    val prohibitedPhrases: String,
+    val prohibitedPhrases: String = "",
     val emojiIntensity: EmojiIntensity
 )
 
-/** 기본 형식 검사 + 금지 표현/이모지 안 씀/글자 수 표기 검사. iOS CaptionValidationReport 포팅. */
+/** 기본 형식 검사 + 이모지 안 씀/글자 수 표기 검사 (금지 표현은 비활성화). iOS CaptionValidationReport 포팅. */
 data class CaptionValidationReport(
     val format: CaptionFormatReport,
-    val prohibitedPhraseMatches: List<String>,
+    val prohibitedPhraseMatches: List<String> = emptyList(),
     val respectsEmojiNonePreference: Boolean,
     val hasNoCharacterCountLabel: Boolean
 ) {
@@ -143,17 +145,12 @@ data class CaptionValidationReport(
         private val COUNT_LABEL_REGEX = Regex("글자\\s*수|[0-9]+\\s*자")
 
         fun evaluate(text: String, context: CaptionValidationContext): CaptionValidationReport {
-            val prohibited = context.prohibitedPhrases
-                .split(Regex("[,;\n]"))
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-            val matches = prohibited.filter { text.contains(it, ignoreCase = true) }
             val containsEmoji = Graphemes.containsEmoji(text)
             val hasCountLabel = COUNT_LABEL_REGEX.containsMatchIn(text)
 
             return CaptionValidationReport(
                 format = CaptionFormatReport.evaluate(text, context.destinationLimit),
-                prohibitedPhraseMatches = matches,
+                prohibitedPhraseMatches = emptyList(),
                 respectsEmojiNonePreference = context.emojiIntensity != EmojiIntensity.NONE || !containsEmoji,
                 hasNoCharacterCountLabel = !hasCountLabel
             )

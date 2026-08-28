@@ -205,8 +205,8 @@ class ComposerViewModel : ViewModel() {
 
     fun validationContext(signature: DraftSignature): CaptionValidationContext =
         CaptionValidationContext(
-            destinationLimit = signature.profile.destination.characterLimit,
-            prohibitedPhrases = signature.profile.prohibitedPhrases,
+            destinationLimit = ExternalPromptBuilder.NEUTRAL_SAFETY_LIMIT,
+            prohibitedPhrases = "",
             emojiIntensity = signature.profile.emojiIntensity
         )
 
@@ -222,8 +222,8 @@ class ComposerViewModel : ViewModel() {
         return CaptionValidationReport.evaluate(
             textToValidate,
             CaptionValidationContext(
-                destinationLimit = profile.destination.characterLimit,
-                prohibitedPhrases = profile.prohibitedPhrases,
+                destinationLimit = ExternalPromptBuilder.NEUTRAL_SAFETY_LIMIT,
+                prohibitedPhrases = "",
                 emojiIntensity = profile.emojiIntensity
             )
         )
@@ -232,7 +232,12 @@ class ComposerViewModel : ViewModel() {
     // MARK: - 생성
 
     fun generateDraft() {
-        if (trimmedIdea.isEmpty() || _state.value.isGenerating) return
+        if (_state.value.isGenerating) return
+        val hasPhoto = hasRepresentativePhoto
+        if (trimmedIdea.isEmpty() && !hasPhoto) {
+            update { it.copy(errorMessage = "이야기나 사진을 입력해 주세요.") }
+            return
+        }
         timerJob?.cancel()
         generationJob?.cancel()
         update {
@@ -298,8 +303,12 @@ class ComposerViewModel : ViewModel() {
     fun startExternalGeneration(provider: DirectAIProvider) = startExternalAIGeneration(provider)
 
     fun startExternalAIGeneration(provider: DirectAIProvider) {
+        if (_state.value.isGenerating) return
         val hasPhoto = hasRepresentativePhoto
-        if ((trimmedIdea.isEmpty() && !hasPhoto) || _state.value.isGenerating) return
+        if (trimmedIdea.isEmpty() && !hasPhoto) {
+            update { it.copy(errorMessage = "이야기나 사진을 입력해 주세요.") }
+            return
+        }
         timerJob?.cancel()
         generationJob?.cancel()
         val attachment = makeRepresentativePhotoAttachment()
@@ -478,8 +487,8 @@ class ComposerViewModel : ViewModel() {
             callToAction = lines.lastOrNull() ?: "",
             hashtags = hashtags,
             composedText = cleanedText,
-            targetCharacterCount = signature.profile.controls.characterCount,
-            destinationCharacterLimit = signature.profile.destination.characterLimit
+            targetCharacterCount = null,
+            destinationCharacterLimit = null
         )
         val candidate = CaptionCandidate(
             source = provider.captionSource,

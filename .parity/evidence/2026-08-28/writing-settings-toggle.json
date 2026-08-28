@@ -1,0 +1,13 @@
+{
+  "captured_at": "2026-08-28T21:11:00+09:00",
+  "iOS": [
+    "launch: writing settings panel is collapsed",
+    "tap header: panel expands and reveals all controls",
+    "capture: ios-expanded-guidelines.png"
+  ],
+  "Android": [
+    "launch: writing settings panel is collapsed",
+    "tap header: panel expands and reveals all controls",
+    "capture: android-expanded-guidelines.png"
+  ]
+}

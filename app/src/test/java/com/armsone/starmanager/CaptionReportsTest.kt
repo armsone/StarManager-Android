@@ -37,16 +37,15 @@ class CaptionReportsTest {
     }
 
     @Test
-    fun `검증 리포트는 금지 표현을 대소문자 무시하고 찾아낸다`() {
+    fun `금지 표현 설정은 비활성화되어 검증 리포트에 영향을 주지 않는다`() {
         val context = CaptionValidationContext(
             destinationLimit = 2200,
             prohibitedPhrases = "강바람, nothing;없는단어",
             emojiIntensity = EmojiIntensity.LOW
         )
         val report = CaptionValidationReport.evaluate(sampleText, context)
-        assertEquals(listOf("강바람"), report.prohibitedPhraseMatches)
-        assertFalse(report.passesAllRules)
-        assertTrue(report.failedRuleDescriptions.any { it.contains("금지 표현 제외: 강바람") })
+        assertEquals(emptyList<String>(), report.prohibitedPhraseMatches)
+        assertTrue(report.passesAllRules)
     }
 
     @Test

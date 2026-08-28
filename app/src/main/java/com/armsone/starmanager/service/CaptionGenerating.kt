@@ -60,6 +60,8 @@ enum class DirectAIProvider(val rawValue: String, val title: String, val url: St
 
 /** iOS ComposerView의 외부 프롬프트 조립을 공용화한 것. */
 object ExternalPromptBuilder {
+    const val NEUTRAL_SAFETY_LIMIT = 20_000
+
     fun build(profile: CreatorProfile, idea: String, mood: PostMood, length: PostLength): String =
         profile.generationPrompt(idea, mood, length)
 
@@ -71,8 +73,8 @@ object ExternalPromptBuilder {
 
     fun validationContext(profile: CreatorProfile): CaptionValidationContext =
         CaptionValidationContext(
-            destinationLimit = profile.destination.characterLimit,
-            prohibitedPhrases = profile.prohibitedPhrases,
+            destinationLimit = NEUTRAL_SAFETY_LIMIT,
+            prohibitedPhrases = "",
             emojiIntensity = profile.emojiIntensity
         )
 
@@ -82,8 +84,7 @@ object ExternalPromptBuilder {
 
 /**
  * iOS PreviewCaptionGenerator 포팅 — 오프라인 결정적 생성기.
- * 선택한 게시 기준 글자 수 상한을 넘지 않는 선에서, 분위기·이모지 강도·원문 반영 정도에
- * 맞춰 문장을 결정적으로 조립한다.
+ * 분위기·이모지 강도·원문 반영 정도에 맞춰 문장을 결정적으로 조립한다.
  */
 class DeterministicCaptionGenerator(
     private val simulatedDelayMillis: Long = 550L
@@ -99,7 +100,7 @@ class DeterministicCaptionGenerator(
 
         val cleanIdea = sanitize(idea)
         val seed = SeedBox(seed(cleanIdea + mood.rawValue + length.rawValue + profile.emojiIntensity.name))
-        val limit = maxOf(20, minOf(profile.controls.characterCount, profile.destination.characterLimit))
+        val limit = profile.controls.characterCount.coerceIn(50, 500)
         val symbol = paragraphEmoji(mood)
 
         val (leadEmoji, bodyEmoji, summaryEmoji) = when (profile.emojiIntensity) {
@@ -120,9 +121,7 @@ class DeterministicCaptionGenerator(
         val lines = mutableListOf(leadLine)
         var used = Graphemes.count(leadLine)
 
-        val banned = bannedPhrases(profile.prohibitedPhrases)
         val bank = rotated(sentenceBank(mood), seed)
-            .filter { sentence -> banned.none { sentence.contains(it) } }
 
         for (sentence in bank) {
             val candidate = if (bodyEmoji.isEmpty()) sentence else "$bodyEmoji $sentence"
@@ -153,8 +152,8 @@ class DeterministicCaptionGenerator(
             callToAction = lines.lastOrNull() ?: "",
             hashtags = emptyList(),
             composedText = composedText,
-            targetCharacterCount = profile.controls.characterCount,
-            destinationCharacterLimit = profile.destination.characterLimit
+            targetCharacterCount = limit,
+            destinationCharacterLimit = null
         )
     }
 

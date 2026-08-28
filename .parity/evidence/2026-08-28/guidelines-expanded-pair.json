@@ -1,0 +1,14 @@
+{
+  "captured_at": "2026-08-28T21:11:00+09:00",
+  "source": {
+    "platform": "iOS",
+    "path": "ios-expanded-guidelines.png",
+    "sha256": "2f5686d2adbe64b9d3a4853e734b7089f8090f62ab064456080b65de160a2737"
+  },
+  "target": {
+    "platform": "Android",
+    "path": "android-expanded-guidelines.png",
+    "sha256": "b05f8965b769357f98be464b53fdac13c348c2be5431d049cd9d3929fe74fcca"
+  },
+  "fixture": "expanded writing settings with the same saved detailed guidelines"
+}

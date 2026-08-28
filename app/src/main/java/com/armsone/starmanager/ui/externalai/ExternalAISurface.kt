@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.MotionEvent
@@ -624,6 +625,9 @@ fun ExternalAISurface(
             ) {
                 AndroidView(
                     factory = { ctx ->
+                        WebView.setWebContentsDebuggingEnabled(
+                            (ctx.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+                        )
                         WebView(ctx).apply {
                             layoutParams = ViewGroup.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,

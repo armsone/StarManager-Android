@@ -220,17 +220,17 @@ capabilities:
       - "composer_posting_handoff_guards"
 
   - id: "simplified_preferences_and_settings_order"
-    purpose: "Personal, transparent writing preferences without owner-specific prose or preset shortcuts. Every instruction sent to AI is visible and editable in one settings surface."
+    purpose: "A dense optional style panel below the media-first composer, without owner-specific prose or preset shortcuts. Every active instruction sent to AI is visible and editable on the first screen."
     source_refs:
       - file: "StarManager/Features/Settings/ProfileSettingsView.swift"
         description: "iPhone Settings view top-to-bottom contract with simplified preferences"
     entry_points:
-      - "ProfileSettingsScreen"
+      - "ComposerScreen -> style settings panel"
     preconditions:
       - "CreatorProfileStore initialized"
     inputs:
-      - "User preferences (audience age, mood, destination, original-text reflection, emoji intensity, length, character count, detailed writing criteria, prohibited phrases, hashtags, external AI browser visibility, theme)"
-    normal_result: "Settings persist neutral per-person writing preferences. Owner-authored defaults, the three '내 프리셋' cards, preset save/apply controls, and the separate tone field are absent."
+      - "User preferences (audience age, mood, destination, original-text reflection, emoji intensity, character count, style, tone, line breaks, and additional instructions)"
+    normal_result: "The first screen persists compact optional writing hints. Owner-authored defaults, the three '내 프리셋' cards, preset save/apply controls, topic, reader, prohibited-phrase, and hashtag-preference rows are absent. Legacy values for those four removed rows remain decode-compatible but inert."
     states:
       IDLE: "Viewing and editing settings"
     algorithms_and_thresholds:
@@ -246,11 +246,11 @@ capabilities:
         preferredLength: "PostLength"
         controls: "GenerationControls"
         additionalInstructions: "String?; shown as 상세 작성 기준"
-        prohibitedPhrases: "String"
-        hashtagStyle: "String"
+        prohibitedPhrases: "Legacy String; decode-compatible but not shown, prompted, or validated"
+        hashtagStyle: "Legacy String; decode-compatible but not shown or prompted"
       showsExternalAIBrowser: "Boolean, defaults false and is stored separately from CreatorProfile JSON"
     producer_consumer_routes:
-      - "ProfileSettingsScreen consumes and mutates CreatorProfileStore StateFlow"
+      - "ComposerScreen consumes and mutates CreatorProfileStore StateFlow"
     persistence_relaunch:
       - "SharedPreferences / JSON storage via CreatorProfileStore; exact legacy owner defaults migrate once to neutral values while user-authored values remain intact"
     permissions_privacy_security:
@@ -266,21 +266,21 @@ capabilities:
     platform_adaptations:
       ios:
         status: "implemented_source_only"
-        description: "Native SwiftUI settings source implements the neutral, destination-aware preference contract"
+        description: "Native SwiftUI composer implements the dense first-screen preference contract"
       android:
         status: "implemented_source_only"
-        description: "Android implementation must match the same neutral, destination-aware preference contract"
+        description: "Android composer matches the same dense first-screen preference contract"
     intentional_differences:
       platform_controls: "Native SwiftUI and Compose controls may differ while labels, choices, order, and persistence remain equivalent"
     implementations:
       ios:
         status: "implemented_source_only"
-        entry_file: "StarManager/Features/Settings/ProfileSettingsView.swift"
-        verification: "iPhone device build, replacement install, and launch passed"
+        entry_file: "StarManager/Features/Composer/ComposerView.swift"
+        verification: "Current compact composer revision is source-only and not built or installed"
       android:
         status: "implemented_source_only"
-        entry_file: "app/src/main/java/com/armsone/starmanager/ui/settings/ProfileSettingsScreen.kt"
-        verification: "76 JVM tests, assembleDebug, replacement install, launch, and settings/composer captures passed on SM-F968N"
+        entry_file: "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt"
+        verification: "Current compact composer revision is source-only and not built or installed"
     dependencies:
       - "androidx.compose.material3"
       - "com.armsone.starmanager.model.CreatorProfileStore"
@@ -367,7 +367,7 @@ capabilities:
     entry_points:
       - "ComposerScreen -> AIChoiceCard / GlossyPrimaryButton"
     preconditions:
-      - "Non-empty user idea entered"
+      - "A representative image or non-empty user idea is present"
     inputs:
       - "User idea, selected provider (Gemini, ChatGPT, Claude, 기기 AI), compact prompt"
       - "Persisted browser visibility choice (default OFF)"
@@ -377,7 +377,7 @@ capabilities:
       CONNECTING: "Connecting to provider and preparing input area ('{provider}에 연결하는 중…' / '입력창을 준비하고 있어요')"
       SUBMITTED: "Prompt submitted to provider ('정보를 보냈어요')"
       WAITING_COUNTDOWN: "Reverse countdown from 1:59 to 0:00 with a shrinking progress bar while the provider answer is pending"
-      COMPLETED: "Stable answer extracted, cleaned, and imported into preview; focus/keyboard dismissed"
+      COMPLETED: "Stable answer extracted, cleaned, and imported into the same editable story field; focus/keyboard dismissed"
       FALLBACK_INTERACTION: "In-app browser presented with reason banner for login, security/CAPTCHA, or manual input"
       ERROR: "Sanitized provider error relayed to Composer status card"
     algorithms_and_thresholds:
@@ -402,7 +402,7 @@ capabilities:
       ExternalAITimingProfile: "readinessTimeoutMs=35000, readinessCadenceMs=700, maxReadinessMisses=12, submitTimeoutMs=15000, submitCadenceMs=500, submitVerificationDelayMs=700, visibleAutoFillTimeoutMs=45000, observationCadenceMs=700, stabilityRequiredTicks=2"
       showsExternalAIBrowser: "Boolean; false when no prior choice is stored"
     producer_consumer_routes:
-      - "ComposerScreen executes HiddenExternalAIWebView -> ComposerViewModel.importAIResult -> PreviewColumn"
+      - "ComposerScreen executes HiddenExternalAIWebView -> ComposerViewModel.importAIResult -> same editable story field"
       - "When showsExternalAIBrowser=true: ComposerScreen executes ExternalAISurface from request start -> status/error callbacks -> automatic ComposerViewModel.importAIResult"
       - "Fallback trigger -> ExternalAISurface (with fallback reason banner) -> onImport -> ComposerViewModel.importAIResult"
     persistence_relaunch:
@@ -416,7 +416,7 @@ capabilities:
       - "Fresh automation state per request while cookie storage persists"
     gestures_accessibility:
       - "Provider buttons stay static and dimmed during generation; single rotating spinner in status card"
-      - "Preview card remains still with empty placeholder until result arrives"
+      - "The editable story field remains the single text surface before and after generation"
       - "Cancel button in both hidden-mode status card and visible browser header; cancellation clears the pending task and closes its WebView so every provider is immediately selectable again"
       - "User-driven scrolling anywhere in the Composer dismisses input focus and the software keyboard without consuming the scroll gesture"
     supported_devices_layouts:
@@ -482,7 +482,7 @@ capabilities:
       GENERATED_EDITABLE: "AI answer has returned to the same editable text field"
     algorithms_and_thresholds:
       - "Representative media is the first image in user-defined order; video entries are skipped"
-      - "On-device generation remains text-only and clearly requires text"
+      - "On-device generation accepts text or a representative-photo-only request; external providers receive the representative image for image-aware writing"
       - "External provider attachment capability is positively confirmed; failure opens visible recovery instead of silently dropping the photo"
     data_contracts:
       representativeImage: "Optional bytes and MIME type derived from the first image item"
@@ -490,7 +490,7 @@ capabilities:
     producer_consumer_routes:
       - "Photo picker or camera -> ComposerViewModel mediaItems -> composer media editor"
       - "Composer text/media -> external AI request -> same composer text field"
-      - "Composer text -> on-device generator -> same composer text field"
+      - "Composer text or representative-photo-only request -> on-device fallback generator -> same composer text field"
     persistence_relaunch:
       - "Composer draft remains transient; profile preferences persist locally"
     permissions_privacy_security:
@@ -503,7 +503,7 @@ capabilities:
     supported_devices_layouts:
       - "Compact phone and regular-width adaptive layouts"
     visual_reference:
-      - "A single composer panel with media controls, editable story text, AI choices, and share action"
+      - "A compact hero, a distinct top panel containing media controls/editable story/AI/share, and a separate dense style panel below"
     platform_adaptations:
       ios:
         status: "build_verified_runtime_provider_pending"
@@ -543,18 +543,15 @@ capabilities:
     preconditions:
       - "CreatorProfile and user idea"
     inputs:
-      - "optional text, optional representative photo, mood, destination, audience age, original-text reflection, emoji intensity, length, and visible profile settings"
+      - "optional text, optional representative photo, mood, destination, audience age, original-text reflection, emoji intensity, character target, style, tone, line breaks, and additional instructions"
     normal_result: "Structured compact Korean prompt string ready for external AI web automation or clipboard copy."
     states:
       READY: "Prompt generated synchronously"
     algorithms_and_thresholds:
       - "Destination and exact character target bullets"
-      - "Two consecutive Korean hashtags bullet"
       - "Mood, audience age, and plain-language original-text reflection bullets"
       - "Sentence linebreak bullet"
       - "Selected four-level emoji policy bullet"
-      - "Prohibited phrases bullet (if nonempty)"
-      - "Hashtag style bullet (if nonempty)"
       - "[상세 작성 기준] section (appended only if the visible field is nonempty)"
       - "No hidden owner-specific writing rules or personal phrase is appended"
     data_contracts:

@@ -29,6 +29,13 @@ data class CreatorProfile(
     val controls: GenerationControls
         get() = generationControls ?: GenerationControls()
 
+    val characterCountPromptInstruction: String
+        get() {
+            val target = controls.characterCount
+            val tolerance = maxOf(5, target / 10)
+            return "완성 문구를 ${target - tolerance}~${target + tolerance}자 사이로 써"
+        }
+
     val usesEmoji: Boolean
         get() = emojiIntensity != EmojiIntensity.NONE
 
@@ -48,15 +55,13 @@ data class CreatorProfile(
         length: PostLength = this.preferredLength
     ): String {
         val trimmed = idea.trim()
-        val count = controls.characterCount
         val parts = mutableListOf<String>()
 
         parts.add("[내가 입력한 내용]\n$trimmed")
 
         val resultLines = mutableListOf<String>()
-        resultLines.add("위 내용을 바탕으로 ${destination.title}에 올릴 한국어 글을 쓰고, 완성 문구만 출력해.")
-        resultLines.add("- 게시 기준: ${destination.limitBasisDescription}")
-        resultLines.add("- 목표 분량: 공백과 줄바꿈 포함 ${count}자를 넘지 않는 선에서 자연스럽게 (억지로 글자 수를 맞추려고 문장을 늘리거나 자르지 마)")
+        resultLines.add("위 내용을 바탕으로 한국어 글을 쓰고, 완성 문구만 출력해.")
+        resultLines.add("- 글자 수: $characterCountPromptInstruction")
         resultLines.add("- 나잇대: ${ageGroup.promptAudienceHint}")
         resultLines.add("- 분위기: ${mood.rawValue}")
         resultLines.add("- 원문 반영: ${length.promptInstruction}")
@@ -65,18 +70,6 @@ data class CreatorProfile(
         resultLines.add("- 말투: ${tone.promptInstruction}")
         resultLines.add("- 줄넘김: ${lineBreakFrequency.promptInstruction}")
 
-        if (accountTopic.isNotBlank()) {
-            resultLines.add("- 주로 쓰는 주제: ${accountTopic.trim()}")
-        }
-        if (audience.isNotBlank()) {
-            resultLines.add("- 읽을 사람: ${audience.trim()}")
-        }
-        if (prohibitedPhrases.isNotBlank()) {
-            resultLines.add("- 금지 표현: ${prohibitedPhrases.trim()}")
-        }
-        if (hashtagStyle.isNotBlank()) {
-            resultLines.add("- 해시태그 취향: ${hashtagStyle.trim()}")
-        }
         if (detailedGuidelines.isNotBlank()) {
             resultLines.add("- 추가로 하고 싶은 설정: ${detailedGuidelines.trim()}")
         }
@@ -92,15 +85,13 @@ data class CreatorProfile(
         mood: PostMood = this.mood,
         length: PostLength = this.preferredLength
     ): String {
-        val count = controls.characterCount
         val parts = mutableListOf<String>()
 
         parts.add("[상황]\n대표 사진 한 장이 함께 첨부돼 있어. 사진을 실제로 살펴보고, 사진에 없는 내용은 지어내지 마.")
 
         val resultLines = mutableListOf<String>()
-        resultLines.add("사진 속 장면과 분위기를 바탕으로 ${destination.title}에 올릴 한국어 글을 쓰고, 완성 문구만 출력해.")
-        resultLines.add("- 게시 기준: ${destination.limitBasisDescription}")
-        resultLines.add("- 목표 분량: 공백과 줄바꿈 포함 ${count}자를 넘지 않는 선에서 자연스럽게")
+        resultLines.add("사진 속 장면과 분위기를 바탕으로 한국어 글을 쓰고, 완성 문구만 출력해.")
+        resultLines.add("- 글자 수: $characterCountPromptInstruction")
         resultLines.add("- 나잇대: ${ageGroup.promptAudienceHint}")
         resultLines.add("- 분위기: ${mood.rawValue}, ${length.promptInstruction}")
         resultLines.add("- 이모지 사용: ${emojiIntensity.promptInstruction}")
@@ -108,18 +99,6 @@ data class CreatorProfile(
         resultLines.add("- 말투: ${tone.promptInstruction}")
         resultLines.add("- 줄넘김: ${lineBreakFrequency.promptInstruction}")
 
-        if (accountTopic.isNotBlank()) {
-            resultLines.add("- 주로 쓰는 주제: ${accountTopic.trim()}")
-        }
-        if (audience.isNotBlank()) {
-            resultLines.add("- 읽을 사람: ${audience.trim()}")
-        }
-        if (prohibitedPhrases.isNotBlank()) {
-            resultLines.add("- 금지 표현: ${prohibitedPhrases.trim()}")
-        }
-        if (hashtagStyle.isNotBlank()) {
-            resultLines.add("- 해시태그 취향: ${hashtagStyle.trim()}")
-        }
         if (detailedGuidelines.isNotBlank()) {
             resultLines.add("- 추가로 하고 싶은 설정: ${detailedGuidelines.trim()}")
         }
@@ -137,16 +116,14 @@ data class CreatorProfile(
         length: PostLength = this.preferredLength
     ): String {
         val trimmed = idea.trim()
-        val count = controls.characterCount
         val parts = mutableListOf<String>()
 
         parts.add("[상황]\n대표 사진 한 장과 내가 적은 메모가 함께 있어. 사진을 실제로 살펴보고, 사진과 메모 둘 다에 어울리는 글을 써 줘. 사진에 없는 내용은 지어내지 마.")
         parts.add("[내가 입력한 내용]\n$trimmed")
 
         val resultLines = mutableListOf<String>()
-        resultLines.add("사진과 위 내용을 함께 반영한 ${destination.title}용 한국어 글을 쓰고, 완성 문구만 출력해.")
-        resultLines.add("- 게시 기준: ${destination.limitBasisDescription}")
-        resultLines.add("- 목표 분량: 공백과 줄바꿈 포함 ${count}자를 넘지 않는 선에서 자연스럽게")
+        resultLines.add("사진과 위 내용을 함께 반영한 한국어 글을 쓰고, 완성 문구만 출력해.")
+        resultLines.add("- 글자 수: $characterCountPromptInstruction")
         resultLines.add("- 나잇대: ${ageGroup.promptAudienceHint}")
         resultLines.add("- 분위기: ${mood.rawValue}, ${length.promptInstruction}")
         resultLines.add("- 이모지 사용: ${emojiIntensity.promptInstruction}")
@@ -154,18 +131,6 @@ data class CreatorProfile(
         resultLines.add("- 말투: ${tone.promptInstruction}")
         resultLines.add("- 줄넘김: ${lineBreakFrequency.promptInstruction}")
 
-        if (accountTopic.isNotBlank()) {
-            resultLines.add("- 주로 쓰는 주제: ${accountTopic.trim()}")
-        }
-        if (audience.isNotBlank()) {
-            resultLines.add("- 읽을 사람: ${audience.trim()}")
-        }
-        if (prohibitedPhrases.isNotBlank()) {
-            resultLines.add("- 금지 표현: ${prohibitedPhrases.trim()}")
-        }
-        if (hashtagStyle.isNotBlank()) {
-            resultLines.add("- 해시태그 취향: ${hashtagStyle.trim()}")
-        }
         if (detailedGuidelines.isNotBlank()) {
             resultLines.add("- 추가로 하고 싶은 설정: ${detailedGuidelines.trim()}")
         }
@@ -211,7 +176,7 @@ enum class EmojiIntensity(
     val promptInstruction: String
 ) {
     NONE(
-        title = "안 씀",
+        title = "안씀",
         promptInstruction = "이모지를 전혀 사용하지 않는다"
     ),
     LOW(
@@ -263,6 +228,10 @@ enum class PostStyle(
     POEM(
         title = "시",
         promptInstruction = "시적인 형식으로, 행과 여백을 살려서"
+    ),
+    RAPPER(
+        title = "랩퍼",
+        promptInstruction = "리듬감 있는 랩 가사 형식으로"
     ),
     DIARY(
         title = "일기",

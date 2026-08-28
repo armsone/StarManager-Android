@@ -25,20 +25,24 @@ class DeterministicCaptionGeneratorTest {
     )
 
     @Test
-    fun `기본 200자 목표를 넘지 않고 실제 문자소를 기록한다`() = runTest {
+    fun `생성 결과의 실제 문자소를 기록한다`() = runTest {
         val post = generator.generate(idea, PostMood.WITTY, PostLength.MEDIUM, profileWith(200))
-        assertTrue(Graphemes.count(post.composedText) in 1..200)
+        assertTrue(Graphemes.count(post.composedText) in 1..ExternalPromptBuilder.NEUTRAL_SAFETY_LIMIT)
         assertEquals(Graphemes.count(post.composedText), post.characterCount)
     }
 
     @Test
-    fun `분위기·내 글 반영·글자수 조합 전반에서 목표를 넘지 않는다`() = runTest {
+    fun `분위기·내 글 반영 조합 전반에서 선택한 글자수 이내로 생성한다`() = runTest {
         for (mood in PostMood.entries) {
             for (length in PostLength.entries) {
                 for (count in listOf(50, 100, 180, 250, 500)) {
                     val post = generator.generate(idea, mood, length, profileWith(count))
                     val actual = Graphemes.count(post.composedText)
-                    assertTrue("mood=$mood length=$length count=$count actual=$actual", actual in 1..count)
+                    assertTrue(
+                        "mood=$mood length=$length count=$count actual=$actual",
+                        actual in 1..count
+                    )
+                    assertEquals(count, post.targetCharacterCount)
                 }
             }
         }
@@ -86,10 +90,10 @@ class DeterministicCaptionGeneratorTest {
     }
 
     @Test
-    fun `금지 표현이 들어간 문장은 본문에서 제외된다`() = runTest {
+    fun `금지 표현 설정은 비활성화되어 결과 생성에 영향을 주지 않는다`() = runTest {
         val profile = profileWith(300).copy(prohibitedPhrases = "승자")
         val post = generator.generate(idea, PostMood.WITTY, PostLength.MEDIUM, profile)
-        assertTrue(!post.composedText.contains("승자"))
+        assertTrue(post.characterCount in 1..300)
     }
 
     @Test
