@@ -6,8 +6,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,14 +22,11 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.RestartAlt
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -44,6 +43,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -55,8 +55,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.armsone.starmanager.design.BrandTheme
-import com.armsone.starmanager.design.IconWell
-import com.armsone.starmanager.design.IconWellVariant
 import com.armsone.starmanager.design.LocalAppAppearance
 import com.armsone.starmanager.model.AppAppearance
 import com.armsone.starmanager.model.CreatorProfileStore
@@ -163,7 +161,6 @@ private fun StarManagerApp(profileStore: CreatorProfileStore) {
         // 인라인 네비게이션 타이틀 + 선행 아이콘 웰
         TopBar(
             title = if (selectedTab == 0) "스타메니저" else "나의 취향",
-            icon = if (selectedTab == 0) Icons.Filled.AutoAwesome else Icons.Filled.Tune,
             appearance = appearance,
             onCancel = if (selectedTab == 0) {
                 {
@@ -245,55 +242,36 @@ private fun StarManagerApp(profileStore: CreatorProfileStore) {
 @Composable
 private fun TopBar(
     title: String,
-    icon: ImageVector,
     appearance: AppAppearance = LocalAppAppearance.current,
     onCancel: (() -> Unit)? = null
 ) {
-    Column {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .background(BrandTheme.canvas(appearance)),
-            contentAlignment = Alignment.Center
-        ) {
-            if (onCancel != null) {
-                TextButton(
-                    onClick = onCancel,
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .testTag("composer.cancel")
-                ) {
-                    Text(
-                        text = "취소",
-                        fontSize = 16.sp,
-                        color = BrandTheme.accent
-                    )
-                }
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(64.dp)
+            .background(BrandTheme.canvas(appearance)),
+        contentAlignment = Alignment.Center
+    ) {
+        if (onCancel != null) {
+            val cancelShape = RoundedCornerShape(22.dp)
+            TextButton(
+                onClick = onCancel,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 12.dp)
+                    .shadow(5.dp, cancelShape, ambientColor = Color.Black.copy(alpha = 0.04f), spotColor = Color.Black.copy(alpha = 0.08f))
+                    .background(Color.White, cancelShape)
+                    .testTag("composer.cancel")
             ) {
-                if (appearance == AppAppearance.BK) {
-                    IconWell(
-                        icon = icon,
-                        appearance = appearance,
-                        variant = if (title == "나의 취향") IconWellVariant.OXBLOOD else IconWellVariant.CARBON,
-                        size = 24.dp,
-                        iconSize = 14.dp
-                    )
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text(
-                    title,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = BrandTheme.labelPrimary(appearance)
-                )
+                Text("취소", fontSize = 16.sp, color = BrandTheme.labelPrimary(appearance))
             }
         }
-        HorizontalDivider(color = BrandTheme.divider(appearance), thickness = 0.5.dp)
+        Text(
+            title,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = BrandTheme.labelPrimary(appearance)
+        )
     }
 }
 
@@ -305,16 +283,22 @@ private fun BottomTabBar(
     onSelect: (Int) -> Unit,
     onReset: () -> Unit
 ) {
-    val isBk = appearance == AppAppearance.BK
-    val background = if (isBk) Color.White else Color.White.copy(alpha = 0.98f)
-
-    Column {
-        HorizontalDivider(color = BrandTheme.divider(appearance), thickness = 0.5.dp)
+    val barShape = RoundedCornerShape(32.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(72.dp)
+            .background(BrandTheme.canvas(appearance)),
+        contentAlignment = Alignment.Center
+    ) {
         Row(
             Modifier
-                .fillMaxWidth()
-                .height(52.dp)
-                .background(background)
+                .fillMaxWidth(0.72f)
+                .height(58.dp)
+                .shadow(12.dp, barShape, ambientColor = Color.Black.copy(alpha = 0.08f), spotColor = Color.Black.copy(alpha = 0.12f))
+                .background(Color.White.copy(alpha = 0.98f), barShape)
+                .border(1.dp, Color.White.copy(alpha = 0.9f), barShape)
+                .padding(4.dp)
         ) {
             BottomTabButton(
                 title = AppTab.COMPOSER.title,
@@ -357,15 +341,13 @@ private fun BottomTabButton(
     testTag: String,
     modifier: Modifier = Modifier
 ) {
-    val tint = if (selected) {
-        BrandTheme.accent
-    } else {
-        if (appearance == AppAppearance.BK) BrandTheme.bkLabelSecondary else Color(0xFF77736F)
-    }
+    val tint = if (selected) BrandTheme.labelPrimary(appearance) else BrandTheme.labelSecondary(appearance)
+    val itemShape = RoundedCornerShape(26.dp)
 
     Column(
         modifier
             .fillMaxSize()
+            .background(if (selected) Color(0xFFE9ECF0) else Color.Transparent, itemShape)
             .semantics { this.selected = selected }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },

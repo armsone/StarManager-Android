@@ -239,11 +239,11 @@
       "dimension": "interaction",
       "classification": "functional",
       "source_ref": {
-        "kind": "source",
-        "value": "External AI login rows in order Gemini, ChatGPT, Claude opening in-app web login",
-        "location": "StarManager/Views/SettingsView.swift"
+        "kind": "spec",
+        "value": "Gemini, ChatGPT, and Claude rows expose truthful 확인 중, 로그인됨, or 로그인 필요 state and open the official in-app provider page",
+        "location": ".sync/product-contract.yaml#external_ai_login_session_reuse"
       },
-      "target_observation": "Rows in order Gemini, ChatGPT, Claude with '로그인 열기' opening full-screen ExternalAISurface WebView with title '{provider} 로그인', close button, and persistent CookieManager/WebStorage session reuse",
+      "target_observation": "Pre-change iPhone and Android rows always said 로그인 열기. Android also kept a stale 로그인이 필요해요 banner over a positively authenticated ChatGPT page and did not dismiss.",
       "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/settings/ProfileSettingsScreen.kt:254",
       "fixture": "catalog-v1/all",
       "fallback_capable": false,
@@ -254,9 +254,23 @@
           "path": ".parity/evidence/settings_ai_20260827/runtime-trace.md",
           "sha256": "b7446395421af9ee39c9b3ada6b4421d7e0c983001d12255de9d123f1c8dff2b",
           "post_change": true
+        },
+        {
+          "id": "android_authenticated_stuck_20260828",
+          "type": "other",
+          "path": ".parity/evidence/login_status_20260828/android_authenticated_stuck.jpg",
+          "sha256": "a983180b62c70b8a4bdbe8d7a8e1140b9df2cdc88227cddfc2daf6d7ec19422a",
+          "post_change": false
+        },
+        {
+          "id": "ios_ambiguous_login_rows_20260828",
+          "type": "other",
+          "path": ".parity/evidence/login_status_20260828/ios_ambiguous_login_rows.png",
+          "sha256": "b3e905d15da58a60ab10e50ebaf69854f9e932a8e112d2dc7108e223fb186198",
+          "post_change": false
         }
       ],
-      "status": "implemented_source_only",
+      "status": "reopened",
       "attempts": [
         {
           "attempt": 1,
@@ -269,9 +283,131 @@
           "date": "2026-08-27",
           "action": "Opened ChatGPT login from settings on Samsung SM-F968N, confirmed official page load, and closed back to the app",
           "result": "ChatGPT open/load/close passed without credentials; Gemini, Claude, and authenticated persistence remain pending"
+        },
+        {
+          "attempt": 3,
+          "date": "2026-08-28",
+          "action": "User supplied iPhone settings and authenticated Android ChatGPT captures, correcting the product contract to truthful three-state labels and positive-evidence auto-dismiss",
+          "result": "Reopened; iOS and Android source changes, builds, and paired runtime traces pending"
+        },
+        {
+          "attempt": 4,
+          "date": "2026-08-28",
+          "action": "Implemented shared session probes, concise state labels, and positive-evidence automatic dismissal on both platforms",
+          "result": "iOS simulator build passed; Android focused tests, build, replacement install, all-provider status capture, and ChatGPT auto-dismiss trace passed; paired iPhone runtime evidence remains pending"
         }
       ],
-      "reopen_history": []
+      "reopen_history": [
+        {
+          "date": "2026-08-28",
+          "observed_by": "user",
+          "description": "Both settings surfaces used ambiguous static 로그인 열기 wording; Android showed authenticated ChatGPT content while retaining a login-required banner and remaining open.",
+          "resolved_by_evidence": null
+        }
+      ]
+    },
+    {
+      "id": "settings_external_ai_login_status_labels",
+      "route_state": "settings_external_ai",
+      "element": "provider_row.status",
+      "dimension": "truthful state text and action semantics",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "spec",
+        "value": "Each provider row shows exactly 확인 중, 로그인됨, or 로그인 필요 from positive session evidence",
+        "location": ".sync/product-contract.yaml#external_ai_login_session_reuse"
+      },
+      "target_observation": "Pre-change iPhone and Android always showed 로그인 열기 regardless of actual provider session state.",
+      "implementation_ref": "iOS ProfileSettingsView.swift; Android ProfileSettingsScreen.kt",
+      "fixture": "login_status_authenticated_expired_late_hydration_20260828",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "android_login_status_all_logged_in_20260828",
+          "type": "other",
+          "path": ".parity/evidence/login_status_20260828/android_postchange_all_logged_in.png",
+          "sha256": "6c95dccb6ae648a3963e3be220232703caaa7315676a9b7d1a521d638b7945a5",
+          "post_change": true
+        }
+      ],
+      "status": "reopened",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-28",
+          "action": "Specified a shared three-state status contract using positive DOM evidence rather than cookie presence or missing login controls",
+          "result": "Implementation and paired settings captures pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-28",
+          "action": "Implemented sequential positive-evidence probes and exact 확인 중, 로그인됨, 로그인 필요 labels on iOS and Android",
+          "result": "Both platform builds passed and Android authenticated-device settings capture passed; paired iPhone capture remains pending"
+        }
+      ],
+      "reopen_history": [
+        {
+          "date": "2026-08-28",
+          "observed_by": "user",
+          "description": "Static 로그인 열기 wording did not tell the user whether login was complete or action was required.",
+          "resolved_by_evidence": null
+        }
+      ]
+    },
+    {
+      "id": "settings_external_ai_authenticated_auto_dismiss",
+      "route_state": "settings_login_surface_authenticated",
+      "element": "login_surface",
+      "dimension": "positive authentication to exactly-once dismissal transition",
+      "classification": "functional",
+      "source_ref": {
+        "kind": "spec",
+        "value": "Positive authenticated DOM evidence clears stale login-required UI, reports success once, dismisses once, and refreshes settings status",
+        "location": ".sync/product-contract.yaml#external_ai_login_session_reuse"
+      },
+      "target_observation": "Pre-change Android remained open with a stale 로그인 필요 banner over authenticated ChatGPT chat history and composer.",
+      "implementation_ref": "iOS ExternalAIBrowserView.swift; Android ExternalAISurface.kt",
+      "fixture": "chatgpt_authenticated_existing_session_20260828",
+      "fallback_capable": false,
+      "evidence": [
+        {
+          "id": "android_login_auto_dismiss_trace_20260828",
+          "type": "behavior_trace",
+          "path": ".parity/evidence/login_status_20260828/android-runtime-trace.md",
+          "sha256": "6bbe00f92cd1a891219e0d4a52789fd14c33c48f0671b3cd8310a6fb3b09815e",
+          "post_change": true
+        },
+        {
+          "id": "android_login_auto_dismiss_settings_20260828",
+          "type": "other",
+          "path": ".parity/evidence/login_status_20260828/android_postchange_auto_dismiss.png",
+          "sha256": "b9e0e5032ec5d40656626f74328d10f4553c1c6fb15399dabca4646343ec66d8",
+          "post_change": true
+        }
+      ],
+      "status": "reopened",
+      "attempts": [
+        {
+          "attempt": 1,
+          "date": "2026-08-28",
+          "action": "Specified positive-evidence, late-hydration-safe, exactly-once authenticated dismissal for both platform login surfaces",
+          "result": "Implementation and paired behavior traces pending"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-08-28",
+          "action": "Implemented positive authenticated DOM detection, stale-warning clearing, session refresh, and exactly-once automatic dismissal on iOS and Android",
+          "result": "Both platform builds passed and Android authenticated ChatGPT auto-dismiss trace passed; paired iPhone behavior trace remains pending"
+        }
+      ],
+      "reopen_history": [
+        {
+          "date": "2026-08-28",
+          "observed_by": "user",
+          "description": "Authenticated ChatGPT content was visible but Android did not clear the login warning or leave the login surface.",
+          "resolved_by_evidence": null
+        }
+      ]
     },
     {
       "id": "composer_external_ai_provider_roster",
@@ -289,7 +425,7 @@
       "fixture": "catalog-v1/all",
       "fallback_capable": false,
       "evidence": [],
-      "status": "implemented_source_only",
+      "status": "reopened",
       "attempts": [
         {
           "attempt": 1,
@@ -302,9 +438,22 @@
           "date": "2026-08-27",
           "action": "Inspected the composer provider row on Samsung SM-F968N",
           "result": "Gemini, ChatGPT, Claude, and 기기 AI observed in order; paired iOS capture remains missing"
+        },
+        {
+          "attempt": 3,
+          "date": "2026-08-28",
+          "action": "Removed selected-provider state and separate Run button; restored direct-action cards and iPhone card geometry after user supplied contradictory paired first-screen captures",
+          "result": "Focused JVM tests and assembleDebug passed; post-change device capture blocked by disconnected wireless ADB"
         }
       ],
-      "reopen_history": []
+      "reopen_history": [
+        {
+          "date": "2026-08-28",
+          "observed_by": "user",
+          "description": "Paired first-screen captures showed red selected outline, oversized cards, and an extra separate Gemini에서 만들기 button on Android while iPhone uses one-tap provider cards.",
+          "resolved_by_evidence": null
+        }
+      ]
     },
     {
       "id": "settings_external_ai_browser_visibility",
@@ -349,7 +498,7 @@
       "fixture": "catalog-v1/all",
       "fallback_capable": true,
       "evidence": [],
-      "status": "implemented_source_only",
+      "status": "reopened",
       "attempts": [
         {
           "attempt": 1,
@@ -374,9 +523,28 @@
           "date": "2026-08-28",
           "action": "Continued a Gemini-timed-out draft: fixed fallback reason banner being wiped on page load by separating it from transient status text, initialized status without a redundant duplicate branch, and added an explicit timeout status after 60 unanswered polls",
           "result": "implemented in source; still uncompiled/unbuilt, runtime verification pending"
+        },
+        {
+          "attempt": 5,
+          "date": "2026-08-28",
+          "action": "Aligned Android AIBI with the iPhone reference: exact origin separation, readiness/submission/stability timing, four-stage submit escalation, visible autofill recovery, provider-error abort, clipboard import, and fresh hidden-to-visible lifecycle; ran focused JVM tests and assembleDebug",
+          "result": "Focused ExternalAI JVM tests and assembleDebug passed; current live provider sessions and deterministic paired screenshots remain unverified, so source-only status is retained"
+        },
+        {
+          "attempt": 6,
+          "date": "2026-08-28",
+          "action": "Corrected host AIBI entry topology from select provider then Run to one-tap provider-card execution matching iPhone",
+          "result": "Source, focused tests, and APK assembly passed; tap-to-task runtime trace remains pending"
         }
       ],
-      "reopen_history": []
+      "reopen_history": [
+        {
+          "date": "2026-08-28",
+          "observed_by": "user",
+          "description": "Android required provider selection followed by a separate Run button, unlike the iPhone direct-action AIBI entry.",
+          "resolved_by_evidence": null
+        }
+      ]
     },
     {
       "id": "composer_external_ai_background_browser_lifecycle",
@@ -419,14 +587,22 @@
       "classification": "functional",
       "source_ref": {
         "kind": "source",
-        "value": "Status progression: connecting ({provider}에 연결하는 중… / 입력창을 준비하고 있어요), prompt submitted (정보를 보냈어요 + 답변을 기다리는 중 (00초)), live elapsed timer (01초 ... 1분 00초)",
+                "value": "Status progression: connecting ({provider}에 연결하는 중… / 입력창을 준비하고 있어요), prompt submitted, then 1:59 to 0:00 reverse countdown with shrinking progress and manual/automatic cancellation",
         "location": "StarManager/Features/Composer/ComposerView.swift"
       },
-      "target_observation": "Deterministic state transitions: connecting -> submitted timestamp -> waiting with live ticking seconds formatted as '00초' ... '1분 00초'",
+      "target_observation": "Deterministic state transitions: connecting -> submitted -> waiting with M:SS reverse countdown, shrinking progress, manual cancel, and automatic cancel at 0:00",
       "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAITimerFormatter.kt",
       "fixture": "catalog-v1/all",
       "fallback_capable": false,
-      "evidence": [],
+      "evidence": [
+        {
+          "id": "aibi_countdown_trace_20260828",
+          "type": "behavior_trace",
+          "path": ".parity/evidence/aibi_countdown_20260828/runtime-trace.md",
+          "sha256": "05c5e513c1b88972aa4fe122288d16035f390f845b52f587e0d4709230455730",
+          "post_change": true
+        }
+      ],
       "status": "implemented_source_only",
       "attempts": [
         {
@@ -440,6 +616,12 @@
           "date": "2026-08-28",
           "action": "Authored deterministic JVM tests for ExternalAITimerFormatter (sub-60s, minute rollover, negative clamp, waiting-status wrapper) after resuming a Gemini-timed-out draft that had left the formatter untested",
           "result": "Tests authored (ExternalAIDraftUtilsTest.kt); not executed in this environment (no build/test execution permitted)"
+        },
+        {
+          "attempt": 3,
+          "date": "2026-08-28",
+          "action": "Replaced elapsed timer with the shared iOS/Android 119-second reverse countdown, shrinking progress bar, manual cancel, and automatic deadline cancellation; ran focused JVM tests and rebuilt the APK",
+          "result": "89 tests and assembleDebug passed; release APK installed on SM-F968N and SM-T500; paired runtime countdown/cancel capture remains open"
         }
       ],
       "reopen_history": []
@@ -662,6 +844,118 @@
         }
       ],
       "reopen_history": []
+    },
+    {
+      "id": "composer_initial.top_bar.visual",
+      "route_state": "composer_initial",
+      "element": "top_bar",
+      "dimension": "app-owned hierarchy and geometry",
+      "classification": "visual",
+      "source_ref": {"kind": "capture", "value": "Plain centered 스타매니저 with leading white cancel pill; no title icon or divider", "location": "SCR-20260828-iztl.png"},
+      "target_observation": "Pre-change Android showed an app-icon well beside the title, red plain cancel text, and a full-width divider.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/MainActivity.kt",
+      "fixture": "composer_initial_user_20260828",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [{"attempt": 1, "date": "2026-08-28", "action": "Removed title icon/divider and styled the cancel action as a white pill", "result": "Build passed; post-change capture pending wireless ADB reconnection"}],
+      "reopen_history": [{"date": "2026-08-28", "observed_by": "user", "description": "First-screen captures showed different Android header anatomy.", "resolved_by_evidence": null}]
+    },
+    {
+      "id": "composer_initial.creation_heading.visual",
+      "route_state": "composer_initial",
+      "element": "creation_card.heading",
+      "dimension": "leading artwork and accent underline",
+      "classification": "visual",
+      "source_ref": {"kind": "capture", "value": "Text-only heading with 36x3 accent underline", "location": "SCR-20260828-iztl.png"},
+      "target_observation": "Pre-change Android showed a black sparkle icon-well and no underline.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt",
+      "fixture": "composer_initial_user_20260828",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [{"attempt": 1, "date": "2026-08-28", "action": "Removed the leading icon-well and restored the BK accent underline", "result": "Build passed; post-change capture pending"}],
+      "reopen_history": [{"date": "2026-08-28", "observed_by": "user", "description": "First-screen captures showed different creation-heading anatomy.", "resolved_by_evidence": null}]
+    },
+    {
+      "id": "composer_initial.style_summary.visual",
+      "route_state": "composer_initial",
+      "element": "creation_card.style_summary",
+      "dimension": "presence, text, and placement",
+      "classification": "visual",
+      "source_ref": {"kind": "source", "value": "Palette icon plus mood, story weight, character count, and preferences-tab guidance between idea and provider row", "location": "StarManager/Features/Composer/ComposerView.swift"},
+      "target_observation": "Pre-change Android omitted the entire row.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt",
+      "fixture": "composer_initial_user_20260828",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [{"attempt": 1, "date": "2026-08-28", "action": "Restored dynamic style summary at the iPhone position", "result": "Format test and build passed; post-change capture pending"}],
+      "reopen_history": [{"date": "2026-08-28", "observed_by": "user", "description": "Android screenshot lacked the iPhone preference summary row.", "resolved_by_evidence": null}]
+    },
+    {
+      "id": "composer_initial.ai_cards.visual",
+      "route_state": "composer_initial",
+      "element": "creation_card.ai_cards",
+      "dimension": "card geometry and disabled state",
+      "classification": "visual",
+      "source_ref": {"kind": "source", "value": "One row, 6 spacing, 62 min height, radius 13, 1 border, 32 icon, 9 semibold title, disabled opacity 0.46", "location": "StarManager/Features/Composer/ComposerView.swift"},
+      "target_observation": "Pre-change Android used taller cards, 8 spacing, 12 labels, and a red selected outline.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt",
+      "fixture": "composer_initial_user_20260828",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [{"attempt": 1, "date": "2026-08-28", "action": "Applied iPhone card geometry and disabled opacity and removed selection visuals", "result": "Build passed; post-change capture pending"}],
+      "reopen_history": [{"date": "2026-08-28", "observed_by": "user", "description": "Android screenshot showed materially larger selectable cards.", "resolved_by_evidence": null}]
+    },
+    {
+      "id": "composer_ready.ai_card_tap.functional",
+      "route_state": "composer_ready",
+      "element": "creation_card.ai_card",
+      "dimension": "tap-to-task transition",
+      "classification": "functional",
+      "source_ref": {"kind": "source", "value": "One tap immediately starts the matching external AIBI or local generator", "location": "StarManager/Features/Composer/ComposerView.swift"},
+      "target_observation": "Pre-change Android selected a provider and required a second tap on a separate Run button.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt",
+      "fixture": "composer_ready_direct_action_20260828",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [{"attempt": 1, "date": "2026-08-28", "action": "Removed selectedChoice state and separate Run action; wired each card directly to its existing provider task", "result": "Contract tests and build passed; runtime tap trace pending"}],
+      "reopen_history": [{"date": "2026-08-28", "observed_by": "user", "description": "User identified different AIBI execution method from the paired first screens.", "resolved_by_evidence": null}]
+    },
+    {
+      "id": "composer_initial.preview_empty.visual",
+      "route_state": "composer_initial",
+      "element": "preview_card.empty_row",
+      "dimension": "icon anatomy",
+      "classification": "visual",
+      "source_ref": {"kind": "capture", "value": "One section icon and a small gray document symbol for the empty message", "location": "SCR-20260828-iztl.png"},
+      "target_observation": "Pre-change Android rendered a second black document icon-well in the empty message.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt",
+      "fixture": "composer_initial_user_20260828",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [{"attempt": 1, "date": "2026-08-28", "action": "Replaced the empty-row icon-well with a simple gray 16dp document icon", "result": "Build passed; post-change capture pending"}],
+      "reopen_history": [{"date": "2026-08-28", "observed_by": "user", "description": "Android screenshot showed duplicated heavy preview artwork.", "resolved_by_evidence": null}]
+    },
+    {
+      "id": "composer_initial.bottom_navigation.visual",
+      "route_state": "composer_initial",
+      "element": "bottom_navigation",
+      "dimension": "container and selected item",
+      "classification": "visual",
+      "source_ref": {"kind": "capture", "value": "Floating white rounded pill with light-gray selected Studio capsule", "location": "SCR-20260828-iztl.png"},
+      "target_observation": "Pre-change Android used a full-width white Material bar with red selected icon/text and top divider.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/MainActivity.kt",
+      "fixture": "composer_initial_user_20260828",
+      "fallback_capable": false,
+      "evidence": [],
+      "status": "implemented_source_only",
+      "attempts": [{"attempt": 1, "date": "2026-08-28", "action": "Rebuilt the bar as a floating pill with neutral selected capsule", "result": "Build passed; post-change capture pending"}],
+      "reopen_history": [{"date": "2026-08-28", "observed_by": "user", "description": "First-screen captures showed different bottom navigation structure and color.", "resolved_by_evidence": null}]
     }
   ]
 }

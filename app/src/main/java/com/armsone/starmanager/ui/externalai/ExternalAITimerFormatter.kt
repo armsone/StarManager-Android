@@ -2,14 +2,10 @@ package com.armsone.starmanager.ui.externalai
 
 import java.util.Locale
 
-/**
- * 외부 AI 생성 대기 경과 시간 포맷터.
- *
- * iOS 요구사항:
- * - 0초~59초: "답변을 기다리는 중 (00초)" ~ "답변을 기다리는 중 (59초)"
- * - 60초 이상: "답변을 기다리는 중 (1분 00초)" ~ "답변을 기다리는 중 (1분 05초)"
- */
+/** 외부 AI 대기 상한과 iPhone 동일 역카운터 포맷. */
 object ExternalAITimerFormatter {
+
+    const val GENERATION_TIMEOUT_SECONDS = 119L
 
     fun formatElapsedSeconds(seconds: Long): String {
         val clamped = seconds.coerceAtLeast(0L)
@@ -23,6 +19,19 @@ object ExternalAITimerFormatter {
     }
 
     fun formatWaitingStatus(seconds: Long): String {
-        return "답변을 기다리는 중 (${formatElapsedSeconds(seconds)})"
+        return "남은 시간 ${formatCountdown(remainingSeconds(seconds))}"
+    }
+
+    fun remainingSeconds(elapsedSeconds: Long): Long {
+        return (GENERATION_TIMEOUT_SECONDS - elapsedSeconds).coerceAtLeast(0L)
+    }
+
+    fun progress(elapsedSeconds: Long): Float {
+        return remainingSeconds(elapsedSeconds).toFloat() / GENERATION_TIMEOUT_SECONDS.toFloat()
+    }
+
+    fun formatCountdown(remainingSeconds: Long): String {
+        val clamped = remainingSeconds.coerceAtLeast(0L)
+        return String.format(Locale.ROOT, "%d:%02d", clamped / 60, clamped % 60)
     }
 }

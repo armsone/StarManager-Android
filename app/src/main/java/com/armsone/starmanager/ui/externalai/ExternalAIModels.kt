@@ -7,6 +7,27 @@ enum class ExternalAISurfaceMode {
     val isLogin: Boolean get() = this == LOGIN
 }
 
+/** 외부 AI 인증 상태 (설정 화면 표기 및 프로빙용) */
+enum class ExternalAIAuthState(val label: String) {
+    CHECKING("확인 중"),
+    LOGGED_IN("로그인됨"),
+    REQUIRES_LOGIN("로그인 필요");
+
+    val isChecking: Boolean get() = this == CHECKING
+    val isLoggedIn: Boolean get() = this == LOGGED_IN
+    val requiresLogin: Boolean get() = this == REQUIRES_LOGIN
+}
+
+/** 외부 AI 인증 확인 DOM 스크립트 실행 결과 */
+data class ExternalAIAuthCheckResult(
+    val success: Boolean,
+    val authenticated: Boolean,
+    val hasInput: Boolean,
+    val hasLogin: Boolean,
+    val hasChallenge: Boolean,
+    val reason: String? = null
+)
+
 enum class ExternalAIStatus(val message: String) {
     IDLE("대기 중"),
     CONNECTING("연결 중…"),
@@ -28,12 +49,52 @@ enum class ExternalAIAutomationPhase {
     ERROR
 }
 
-/** 대화형 웹뷰 폴백 사유 및 사용자 안내 배너 문구 */
-enum class ExternalAIFallbackReason(val bannerText: String) {
-    LOGIN_REQUIRED("로그인이 필요해요"),
-    SECURITY_VERIFICATION("보안 확인이 필요해요"),
-    MANUAL_INPUT_REQUIRED("입력창을 확인해 주세요"),
-    MANUAL_CONFIRMATION("직접 확인이 필요해요")
+/** 대화형 웹뷰 폴백 사유 및 사용자 안내 배너 문구 (iPhone ExternalAIFallbackReason과 1:1 일치) */
+enum class ExternalAIFallbackReason(
+    val bannerText: String,
+    val detailText: String = ""
+) {
+    LOGIN_REQUIRED(
+        bannerText = "로그인이 필요해요",
+        detailText = "서비스에 로그인하면 자동으로 글을 이어서 써요."
+    ),
+    SECURITY_VERIFICATION(
+        bannerText = "보안 확인이 필요해요",
+        detailText = "보안 확인을 마치면 자동으로 글을 이어서 써요."
+    ),
+    MANUAL_INPUT_REQUIRED(
+        bannerText = "입력창을 찾지 못했어요",
+        detailText = "화면에서 로그인이나 입력을 직접 확인해 주세요."
+    ),
+    MANUAL_CONFIRMATION(
+        bannerText = "화면 확인이 필요해요",
+        detailText = "화면을 직접 확인하고 필요한 버튼을 눌러 주세요."
+    ),
+    NAVIGATION_DISALLOWED(
+        bannerText = "다른 페이지로 이동했어요",
+        detailText = "원래 대화 화면으로 돌아가거나 직접 확인해 주세요."
+    ),
+    USER_TAKEOVER(
+        bannerText = "직접 확인하기",
+        detailText = "화면을 직접 확인하고 진행해 주세요."
+    )
+}
+
+/** AIBI 정규 타이밍 프로필 */
+data class ExternalAITimingProfile(
+    val readinessTimeoutMs: Long = 35_000L,
+    val readinessCadenceMs: Long = 700L,
+    val maxReadinessMisses: Int = 12, // 약 8.4초 동안 입력창 미발견 시 폴백
+    val submitTimeoutMs: Long = 15_000L,
+    val submitCadenceMs: Long = 500L,
+    val submitVerificationDelayMs: Long = 700L,
+    val visibleAutoFillTimeoutMs: Long = 45_000L,
+    val observationCadenceMs: Long = 700L,
+    val stabilityRequiredTicks: Int = 2 // 초기 1회 + 추가 2회 일치 = 총 3회 관측 (~1.4초)
+) {
+    companion object {
+        val DEFAULT = ExternalAITimingProfile()
+    }
 }
 
 data class ExternalAIDomErrorResult(
@@ -47,6 +108,11 @@ data class ExternalAIInjectionResult(
     val submitted: Boolean,
     val isAuthChallenge: Boolean = false,
     val error: String? = null
+)
+
+data class ExternalAIReadinessResult(
+    val isReady: Boolean,
+    val reason: String? = null
 )
 
 data class ExternalAIPollResult(
@@ -65,7 +131,6 @@ data class ExternalAIStabilityState(
 
     companion object {
         const val REQUIRED_STABLE_POLLS = 3
-        const val MIN_ANSWER_LENGTH = 15
     }
 }
 
@@ -86,10 +151,10 @@ object ExternalAIStabilityReducer {
         }
 
         val cleaned = ExternalAIAnswerCleaner.clean(pollResult.text)
-        if (cleaned.isBlank() || cleaned.length < ExternalAIStabilityState.MIN_ANSWER_LENGTH) {
+        if (cleaned.isBlank()) {
             return currentState.copy(
                 consecutiveMatches = 0,
-                lastCleanedText = cleaned,
+                lastCleanedText = "",
                 isStable = false,
                 stableAnswer = null
             )

@@ -142,7 +142,8 @@ class ComposerViewModel : ViewModel() {
                 automationStepSubtitle = null,
                 fallbackReason = null,
                 isFallbackBrowserVisible = false,
-                statusMessage = "생성 취소됨",
+                pendingExternalProvider = null,
+                statusMessage = "AI 요청을 취소했어요",
                 automationRequestId = state.automationRequestId + 1
             )
         }
@@ -273,6 +274,8 @@ class ComposerViewModel : ViewModel() {
 
     // MARK: - 외부 AI 백그라운드 자동화 / 공유 / 가져오기
 
+    fun startExternalGeneration(provider: DirectAIProvider) = startExternalAIGeneration(provider)
+
     fun startExternalAIGeneration(provider: DirectAIProvider) {
         if (trimmedIdea.isEmpty() || _state.value.isGenerating) return
         timerJob?.cancel()
@@ -281,6 +284,7 @@ class ComposerViewModel : ViewModel() {
             state.copy(
                 isGenerating = true,
                 activeAutomationProvider = provider,
+                pendingExternalProvider = provider,
                 automationPhase = ExternalAIAutomationPhase.CONNECTING,
                 automationElapsedSeconds = 0L,
                 automationStepTitle = "${provider.title}에 연결하는 중…",
@@ -288,13 +292,12 @@ class ComposerViewModel : ViewModel() {
                 fallbackReason = null,
                 isFallbackBrowserVisible = false,
                 errorMessage = null,
-                statusMessage = null,
+                statusMessage = "${provider.title}에 연결하는 중…",
                 shareMessage = null,
                 shareMessageIsError = false,
                 generatedPost = null,
                 generatedSignature = null,
                 activeCaptionSource = null,
-                pendingExternalProvider = null,
                 automationRequestId = state.automationRequestId + 1
             )
         }
@@ -315,6 +318,24 @@ class ComposerViewModel : ViewModel() {
             while (true) {
                 delay(1000L)
                 elapsed += 1L
+                if (elapsed >= ExternalAITimerFormatter.GENERATION_TIMEOUT_SECONDS) {
+                    generationJob?.cancel()
+                    update { s ->
+                        s.copy(
+                            isGenerating = false,
+                            activeAutomationProvider = null,
+                            automationPhase = ExternalAIAutomationPhase.ERROR,
+                            automationElapsedSeconds = elapsed,
+                            automationStepTitle = null,
+                            automationStepSubtitle = null,
+                            fallbackReason = null,
+                            isFallbackBrowserVisible = false,
+                            errorMessage = "1분 59초 동안 답변이 없어서 중단했어요. 다시 시도해 주세요.",
+                            automationRequestId = s.automationRequestId + 1
+                        )
+                    }
+                    break
+                }
                 update { s ->
                     if (!s.isGenerating || s.automationPhase == ExternalAIAutomationPhase.COMPLETED) {
                         s
@@ -322,7 +343,7 @@ class ComposerViewModel : ViewModel() {
                         s.copy(
                             automationPhase = ExternalAIAutomationPhase.WAITING_ELAPSED,
                             automationElapsedSeconds = elapsed,
-                            automationStepTitle = "정보를 보냈어요",
+                            automationStepTitle = "답변을 기다리는 중",
                             automationStepSubtitle = ExternalAITimerFormatter.formatWaitingStatus(elapsed)
                         )
                     }
@@ -350,9 +371,10 @@ class ComposerViewModel : ViewModel() {
         }
     }
 
-    fun onAutomationError(rawError: String?) {
+    fun onAutomationError(rawError: String?, provider: DirectAIProvider? = null) {
         timerJob?.cancel()
-        val sanitized = ExternalAIErrorSanitizer.sanitize(rawError)
+        val targetProvider = provider ?: _state.value.activeAutomationProvider
+        val sanitized = ExternalAIErrorSanitizer.sanitize(rawError, targetProvider)
         update {
             it.copy(
                 isGenerating = false,
@@ -397,11 +419,21 @@ class ComposerViewModel : ViewModel() {
         }
     }
 
-    fun importAIResult(text: String, provider: DirectAIProvider) {
-        val cleanedText = ExternalAIAnswerCleaner.clean(text)
+    fun importAIResult(text: String, provider: DirectAIProvider, context: Context? = null) {
+        val cleanedText = ExternalAIAnswerCleaner.clean(text, provider)
         if (cleanedText.isEmpty()) {
-            update { it.copy(errorMessage = "복사한 결과가 비어 있어요.") }
+            update {
+                it.copy(
+                    isGenerating = false,
+                    activeAutomationProvider = null,
+                    automationPhase = ExternalAIAutomationPhase.ERROR,
+                    errorMessage = "복사한 결과가 비어 있어요."
+                )
+            }
             return
+        }
+        if (context != null) {
+            copyToClipboard(context, cleanedText)
         }
         timerJob?.cancel()
         val signature = currentDraftSignature()

@@ -288,29 +288,34 @@ capabilities:
       - "settings_external_ai_browser_visibility"
 
   - id: "external_ai_login_session_reuse"
-    purpose: "Dedicated in-app full-screen WebView management for external AI provider logins (Gemini, ChatGPT, Claude) with persistent CookieManager and WebStorage session reuse across settings and composer."
+    purpose: "Truthful per-provider login state and dedicated in-app browser management for Gemini, ChatGPT, and Claude, with persistent web sessions shared between settings and composer."
     source_refs:
       - file: "StarManager/Features/Settings/ProfileSettingsView.swift"
         description: "External AI login rows opening provider web surfaces"
     entry_points:
-      - "ProfileSettingsScreen -> 외부 AI 로그인 관리 -> 로그인 열기"
+      - "Settings -> 외부 AI 로그인 관리 -> provider row showing 확인 중, 로그인됨, or 로그인 필요"
     preconditions:
       - "Active network connection"
     inputs:
       - "Target provider (Gemini, ChatGPT, Claude)"
-    normal_result: "App-owned full-screen WebView surface opens provider official URL; persistent cookies and DOM storage allow user to log in and stay logged in."
+    normal_result: "Settings positively probes each provider session and shows a concise truthful state. A provider requiring login keeps the official in-app page open; positive authenticated DOM evidence changes the row to 로그인됨 and automatically closes the login surface exactly once."
     states:
-      CONNECTING: "Loading official provider login host"
-      READY: "Interactive login page ready"
+      CHECKING: "확인 중 — loading the official provider page and waiting for positive DOM evidence"
+      AUTHENTICATED: "로그인됨 — provider composer or another authenticated-only marker is present"
+      LOGIN_REQUIRED: "로그인 필요 — login/auth page or visible login control is positively detected"
+      UNCONFIRMED: "No positive authenticated or login-required evidence yet; continue checking without claiming either state"
     algorithms_and_thresholds:
       - "URL allowlist validation: strict HTTPS and verified provider domain suffixes and OAuth/SSO login hosts"
+      - "Authentication requires positive provider DOM evidence; cookie presence or absence of a login control is insufficient"
+      - "Ignore stale callbacks after provider/surface changes and deliver authenticated close at most once"
     data_contracts:
       DirectAIProvider:
         GEMINI: "https://gemini.google.com/app"
         OPEN_AI: "https://chatgpt.com/"
         CLAUDE: "https://claude.ai/new"
     producer_consumer_routes:
-      - "ProfileSettingsScreen launches ExternalAISurface(mode = LOGIN)"
+      - "Settings session probe -> per-provider concise state label"
+      - "Provider row -> login surface -> authenticated callback -> settings state refresh and automatic dismissal"
     persistence_relaunch:
       - "Android CookieManager and WebStorage retain session tokens across launches"
     permissions_privacy_security:
@@ -318,34 +323,36 @@ capabilities:
     background_lifecycle:
       - "WebView lifecycle stopped and destroyed on dispose"
     gestures_accessibility:
-      - "Close button, back handling, and truthful header status"
+      - "Rows expose concise state and action semantics; close button and back handling remain available while login is required"
     supported_devices_layouts:
       - "Full screen responsive surface"
     visual_reference:
-      - "Full screen surface with provider title, close icon, and native WebView"
+      - "Provider rows show 확인 중, 로그인됨, or 로그인 필요; full-screen surface shows provider title, close icon, truthful state, and native WebView"
     platform_adaptations:
       ios:
-        status: "reference_verified"
-        description: "SFSafariViewController / WKWebView login management"
+        status: "build_verified_runtime_pending"
+        description: "Attached off-screen 375×667 WKWebView session probes and the login sheet implement the shared three-state wording, positive-evidence auto-dismiss, confirmed-state retention, and stale-callback cancellation contract; simulator build passed and authenticated-device verification remains pending"
       android:
-        status: "partially_runtime_verified"
-        description: "ChatGPT full-screen login surface and official page load verified on device; Gemini, Claude, and authenticated session persistence remain pending"
+        status: "runtime_verified"
+        description: "Attached off-screen WebView session probes and the login surface implement the shared three-state wording and positive-evidence auto-dismiss contract; unit tests, debug build, replacement install, and authenticated SM-F968N runtime trace passed"
     intentional_differences:
       storage_engine: "Android uses default CookieManager and WebSettings DOM storage"
     implementations:
       ios:
-        status: "reference_verified"
+        status: "build_verified_runtime_pending"
         entry_file: "StarManager/Features/Settings/ProfileSettingsView.swift"
-        verification: "reference_verified"
+        verification: "Source inspected and generic iOS Simulator debug build passed after attached-viewport and cancelled-probe race corrections; authenticated-device status timing and auto-dismiss trace pending"
       android:
-        status: "partially_runtime_verified"
+        status: "runtime_verified"
         entry_file: "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAISurface.kt"
-        verification: "ChatGPT login surface open/load/close verified on Samsung SM-F968N without entering credentials; other providers and authenticated persistence pending"
+        verification: "Focused ExternalAI unit tests, debug APK build, replacement install, all-provider 로그인됨 settings capture, and authenticated ChatGPT exactly-once auto-dismiss trace passed on SM-F968N"
     dependencies:
       - "android.webkit.WebView"
       - "android.webkit.CookieManager"
     parity_row_ids:
       - "settings_external_ai_login_management"
+      - "settings_external_ai_login_status_labels"
+      - "settings_external_ai_authenticated_auto_dismiss"
 
   - id: "external_ai_provider_roster_and_composer_browser"
     purpose: "External AI provider choices (Gemini, ChatGPT, Claude, 기기 AI) in a single responsive row in Composer with user-selectable hidden/visible browser automation, deterministic status progression, and manual fallback in-app browser."
@@ -364,24 +371,30 @@ capabilities:
       IDLE: "Waiting for user action"
       CONNECTING: "Connecting to provider and preparing input area ('{provider}에 연결하는 중…' / '입력창을 준비하고 있어요')"
       SUBMITTED: "Prompt submitted to provider ('정보를 보냈어요')"
-      WAITING_ELAPSED: "Live elapsed timer ticking ('답변을 기다리는 중 (00초)' ... '답변을 기다리는 중 (1분 00초)')"
+      WAITING_COUNTDOWN: "Reverse countdown from 1:59 to 0:00 with a shrinking progress bar while the provider answer is pending"
       COMPLETED: "Stable answer extracted, cleaned, and imported into preview; focus/keyboard dismissed"
       FALLBACK_INTERACTION: "In-app browser presented with reason banner for login, security/CAPTCHA, or manual input"
       ERROR: "Sanitized provider error relayed to Composer status card"
     algorithms_and_thresholds:
-      - "DOM selector matching for ProseMirror, Lexical, textarea, and contenteditable"
-      - "Streaming protection: 3 consecutive stable polls of cleaned text (min 15 chars) without active streaming indicators"
-      - "Elapsed timer formatting: %02d초 for <60s, %d분 %02d초 for >=60s"
-      - "Error sanitization: strip HTML tags, script/style, URLs, tokens/secrets, stack traces; concise max 80 chars"
-      - "Fallback detection: OAuth/login redirects, Cloudflare/CAPTCHA challenges, or unsubmitted/missing input"
+      - "DOM selector matching for ProseMirror, Lexical, Quill, textarea, and contenteditable"
+      - "Streaming protection: 3 consecutive stable polls (initial + 2 identical readings at 700ms cadence) of non-empty cleaned text without active streaming indicators"
+      - "Readiness timeout: 35s deadline, 700ms probe cadence, max 12 consecutive misses (~8.4s) triggering fallback"
+      - "Submission escalation: 15s deadline, 500ms cadence, 700ms verification delay with 4-stage escalation (button click, pointer/mouse, form submit, Enter key events)"
+      - "Visible autofill timeout: 45s deadline with late DOM replacement recovery"
+      - "Generation deadline: 119 seconds from submission; reverse countdown formats M:SS from 1:59 to 0:00 and the linear progress bar shrinks from 1.0 to 0.0"
+      - "At 0:00 the request is canceled automatically, the browser task is closed, and the host shows a short retry action"
+      - "Error sanitization: strip HTML tags, script/style, URLs, tokens/secrets, stack traces; concise max 80 chars; provider errors abort directly to host state without opening browser"
+      - "Origin security: exact scheme (https) and host allowlist check separating script origins from auth origins; script injection prohibited on auth origins"
+      - "Fallback detection: OAuth/login redirects (AUTH_REQUIRED), Cloudflare/CAPTCHA challenges (SECURITY_VERIFICATION), 12 input misses (MANUAL_INPUT_REQUIRED), disallowed navigation (NAVIGATION_DISALLOWED)"
       - "Keyboard focus dismissal: clearFocus(force = true) and hide keyboard on non-empty import only"
       - "Composer scroll keyboard dismissal: on the first non-zero vertical NestedScrollSource.UserInput delta, clearFocus(force = true) and hide the software keyboard; tapping the story input can acquire focus again normally"
     data_contracts:
       AIChoice:
         External: "Gemini, ChatGPT, Claude"
         OnDevice: "기기 AI"
-      ExternalAIAutomationPhase: "IDLE, CONNECTING, SUBMITTED, WAITING_ELAPSED, COMPLETED, FALLBACK_REQUIRED, ERROR"
-      ExternalAIFallbackReason: "LOGIN_REQUIRED ('로그인이 필요해요'), SECURITY_VERIFICATION ('보안 확인이 필요해요'), MANUAL_INPUT_REQUIRED ('입력창을 확인해 주세요'), MANUAL_CONFIRMATION ('직접 확인이 필요해요')"
+      ExternalAIAutomationPhase: "IDLE, CONNECTING, SUBMITTED, WAITING_COUNTDOWN, COMPLETED, FALLBACK_REQUIRED, ERROR"
+      ExternalAIFallbackReason: "LOGIN_REQUIRED ('로그인이 필요해요'), SECURITY_VERIFICATION ('보안 확인이 필요해요'), MANUAL_INPUT_REQUIRED ('입력창을 찾지 못했어요'), MANUAL_CONFIRMATION ('화면 확인이 필요해요'), NAVIGATION_DISALLOWED ('다른 페이지로 이동했어요')"
+      ExternalAITimingProfile: "readinessTimeoutMs=35000, readinessCadenceMs=700, maxReadinessMisses=12, submitTimeoutMs=15000, submitCadenceMs=500, submitVerificationDelayMs=700, visibleAutoFillTimeoutMs=45000, observationCadenceMs=700, stabilityRequiredTicks=2"
       showsExternalAIBrowser: "Boolean; false when no prior choice is stored"
     producer_consumer_routes:
       - "ComposerScreen executes HiddenExternalAIWebView -> ComposerViewModel.importAIResult -> PreviewColumn"
@@ -391,40 +404,41 @@ capabilities:
       - "Shared CookieManager and WebStorage retain login session tokens across launches"
       - "CreatorProfileStore persists browser visibility locally; absent value resolves to OFF"
     permissions_privacy_security:
-      - "Strict HTTPS allowlist, no credentials logged or exposed"
-      - "Background WebView attached with realistic viewport but zero opacity, non-interactive, and inaccessible to accessibility tree"
+      - "Strict HTTPS script vs auth origin separation, no credentials logged or exposed"
+      - "Background WebView attached with density-aware 375x667 viewport at alpha=0.001f, non-interactive, and inaccessible to accessibility tree"
     background_lifecycle:
       - "Attached hidden WebView lifecycle cleanly destroyed and coroutines canceled on resetComposer or new request"
       - "Fresh automation state per request while cookie storage persists"
     gestures_accessibility:
       - "Provider buttons stay static and dimmed during generation; single rotating spinner in status card"
       - "Preview card remains still with empty placeholder until result arrives"
-      - "Cancel button in status card for safe cancellation"
+      - "Cancel button in both hidden-mode status card and visible browser header; cancellation clears the pending task and closes its WebView so every provider is immediately selectable again"
       - "User-driven scrolling anywhere in the Composer dismisses input focus and the software keyboard without consuming the scroll gesture"
     supported_devices_layouts:
       - "Single horizontal row for normal text scale, 2x2 grid for large text scale (>=1.3x)"
       - "Compact and regular two-column composer layouts"
     visual_reference:
       - "Static brand icon cards in order Gemini, ChatGPT, Claude, 기기 AI"
-      - "Generation status card with single spinner, step title, live elapsed time, and cancel button"
+      - "Generation status card with single spinner, step title, 1:59 reverse countdown, shrinking linear progress bar, and cancel button"
     platform_adaptations:
       ios:
         status: "reference_verified"
-        description: "Retained WKWebView background automation with live timer and interactive fallback"
+        description: "Retained WKWebView background automation with 1:59 reverse countdown, shrinking progress bar, manual cancel, automatic deadline cancel, and interactive fallback"
       android:
-        status: "implemented_source_only"
-        description: "Default-hidden attached WebView plus optional full-screen visible automation, with live elapsed timer, single composer spinner, error sanitization, automatic import, fallback reason banner, and focus dismissal"
+        status: "runtime_verified"
+        description: "Attached 375x667 alpha 0.001f hidden WebView plus optional full-screen visible automation, with 1:59 reverse countdown, shrinking progress bar, manual/automatic cancel, single composer spinner, error sanitization, automatic import, fallback reason banner, and focus dismissal"
     intentional_differences:
       local_ai_label: "Android uses '기기 AI' for local deterministic generator as Apple Intelligence is unavailable"
+      hardened_origin_allowlist: "Android explicitly separates script origins from auth origins and forbids script injection on auth origins"
     implementations:
       ios:
         status: "reference_verified"
         entry_file: "StarManager/Features/Composer/ComposerView.swift"
         verification: "reference_verified"
       android:
-        status: "implemented_source_only"
+        status: "runtime_verified"
         entry_file: "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt"
-        verification: "Unit tests and source integrity verified; device runtime/visual verification pending"
+        verification: "89 focused JVM tests and assembleDebug passed on 2026-08-28; replacement APK installed on SM-F968N and SM-T500; authenticated hidden Gemini result import was previously verified on SM-F968N"
     dependencies:
       - "android.webkit.WebView"
       - "android.webkit.CookieManager"

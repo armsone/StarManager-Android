@@ -77,9 +77,11 @@ import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Diamond
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -96,6 +98,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
@@ -146,16 +149,26 @@ import com.armsone.starmanager.model.PostLength
 import com.armsone.starmanager.model.PostMood
 import com.armsone.starmanager.service.DirectAIProvider
 import android.annotation.SuppressLint
+import android.os.SystemClock
+import android.view.InputDevice
+import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.ViewGroup
+import android.view.Gravity
+import android.view.inputmethod.InputMethodManager
 import android.webkit.CookieManager
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.viewinterop.AndroidView
 import com.armsone.starmanager.ui.externalai.ExternalAIDomErrorResult
+import com.armsone.starmanager.ui.externalai.ExternalAIAutomationPhase
+import com.armsone.starmanager.ui.externalai.ExternalAIErrorSanitizer
 import com.armsone.starmanager.ui.externalai.ExternalAIFallbackClassifier
 import com.armsone.starmanager.ui.externalai.ExternalAIFallbackReason
 import com.armsone.starmanager.ui.externalai.ExternalAIPollResult
@@ -165,6 +178,8 @@ import com.armsone.starmanager.ui.externalai.ExternalAISurface
 import com.armsone.starmanager.ui.externalai.ExternalAISurfaceMode
 import com.armsone.starmanager.ui.externalai.ExternalAIStabilityReducer
 import com.armsone.starmanager.ui.externalai.ExternalAIStabilityState
+import com.armsone.starmanager.ui.externalai.ExternalAITimingProfile
+import com.armsone.starmanager.ui.externalai.ExternalAITimerFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -173,6 +188,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
+import kotlin.coroutines.resume
 
 @Composable
 fun ComposerScreen(viewModel: ComposerViewModel) {
@@ -192,7 +208,6 @@ fun ComposerScreen(viewModel: ComposerViewModel) {
             }
         }
     }
-    var cameraOutputPath by rememberSaveable { mutableStateOf<String?>(null) }
 
     BoxWithConstraints(
         Modifier
@@ -222,7 +237,7 @@ fun ComposerScreen(viewModel: ComposerViewModel) {
                     verticalAlignment = Alignment.Top
                 ) {
                     Box(Modifier.weight(1f)) {
-                        CreationColumn(viewModel, state, cameraOutputPath) { cameraOutputPath = it }
+                        CreationColumn(viewModel, state)
                     }
                     Box(Modifier.weight(1f)) { PreviewColumn(viewModel, state) }
                 }
@@ -231,7 +246,7 @@ fun ComposerScreen(viewModel: ComposerViewModel) {
                     Modifier.widthIn(max = contentMaxWidth),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    CreationColumn(viewModel, state, cameraOutputPath) { cameraOutputPath = it }
+                    CreationColumn(viewModel, state)
                     PreviewColumn(viewModel, state)
                 }
             }
@@ -245,9 +260,7 @@ fun ComposerScreen(viewModel: ComposerViewModel) {
 @OptIn(ExperimentalFoundationApi::class)
 private fun CreationColumn(
     viewModel: ComposerViewModel,
-    state: ComposerUiState,
-    cameraOutputPath: String?,
-    onCameraOutputPathChange: (String?) -> Unit
+    state: ComposerUiState
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
@@ -309,72 +322,28 @@ private fun CreationColumn(
 
     val scope = rememberCoroutineScope()
 
-    var cameraCaptureRequest by remember { mutableStateOf(0) }
-    val storagePermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { _ ->
-        cameraCaptureRequest += 1
+    var showsContinuousCamera by rememberSaveable { mutableStateOf(false) }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        if (permissions[Manifest.permission.CAMERA] == true) showsContinuousCamera = true
     }
 
-    val cameraLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.TakePicture()
-    ) { success ->
-        val file = cameraOutputPath?.let(::File)
-        scope.launch {
-            var photoAdded = false
-            try {
-                val (photoBytes, gallerySaved) = withContext(Dispatchers.IO) {
-                    val bytes = file
-                        ?.takeIf { success && it.isFile }
-                        ?.let { output ->
-                            runCatching { output.readBytes() }
-                                .getOrNull()
-                                ?.takeIf { it.isNotEmpty() }
-                        }
-                    val saved = if (bytes != null) {
-                        saveImageToGallery(context, bytes)
-                    } else {
-                        true
-                    }
-                    bytes to saved
-                }
-                if (photoBytes != null) {
-                    val previousCount = viewModel.state.value.mediaItems.size
-                    viewModel.addCameraPhoto(photoBytes, gallerySaved = gallerySaved)
-                    photoAdded = viewModel.state.value.mediaItems.size > previousCount
-                }
-            } finally {
-                runCatching {
-                    withContext(NonCancellable + Dispatchers.IO) {
-                        file?.delete()
+    if (showsContinuousCamera) {
+        ContinuousCameraCapture(
+            maxCount = MediaAttachmentPolicy.MAX_ITEMS,
+            currentCount = state.mediaItems.size,
+            onDone = { photos ->
+                showsContinuousCamera = false
+                scope.launch {
+                    photos.forEach { bytes ->
+                        val saved = withContext(Dispatchers.IO) { saveImageToGallery(context, bytes) }
+                        viewModel.addCameraPhoto(bytes, gallerySaved = saved)
                     }
                 }
-                onCameraOutputPathChange(null)
-            }
-            if (photoAdded && MediaAttachmentPolicy.availableSlots(viewModel.state.value.mediaItems.size) > 0) {
-                cameraCaptureRequest += 1
-            }
-        }
-    }
-
-    LaunchedEffect(cameraCaptureRequest) {
-        if (cameraCaptureRequest == 0) return@LaunchedEffect
-        var file: File? = null
-        try {
-            val dir = File(context.cacheDir, "camera")
-            check(dir.isDirectory || dir.mkdirs())
-            val output = File(dir, "capture-${UUID.randomUUID()}.jpg")
-            file = output
-            onCameraOutputPathChange(output.absolutePath)
-            val uri = FileProvider.getUriForFile(
-                context, "com.armsone.starmanager.fileprovider", output
-            )
-            cameraLauncher.launch(uri)
-        } catch (_: Exception) {
-            runCatching { file?.delete() }
-            onCameraOutputPathChange(null)
-            viewModel.cameraUnavailable()
-        }
+            },
+            onCancel = { showsContinuousCamera = false }
+        )
     }
 
     Column(
@@ -385,14 +354,7 @@ private fun CreationColumn(
             .testTag("composer.creationCard"),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconWell(
-                icon = Icons.Filled.AutoAwesome,
-                appearance = appearance,
-                size = 28.dp,
-                iconSize = 16.dp
-            )
-            Spacer(Modifier.width(10.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Text(
                 "오늘 어떤 이야기를 전할까요?",
                 fontSize = 20.sp,
@@ -401,6 +363,13 @@ private fun CreationColumn(
                 lineHeight = 26.sp,
                 maxLines = 2
             )
+            if (appearance == AppAppearance.BK) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 36.dp, height = 3.dp)
+                        .background(BrandTheme.accent, RoundedCornerShape(1.5.dp))
+                )
+            }
         }
 
         IdeaField(
@@ -409,6 +378,25 @@ private fun CreationColumn(
             appearance = appearance,
             modifier = Modifier.testTag("composer.idea")
         )
+
+        Row(
+            modifier = Modifier.padding(horizontal = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Icon(
+                Icons.Outlined.Palette,
+                contentDescription = null,
+                tint = BrandTheme.labelSecondary(appearance),
+                modifier = Modifier.size(15.dp)
+            )
+            Text(
+                "${profile.mood.rawValue} · 이야기 비중 ${profile.preferredLength.storyWeightTitle} · ${profile.controls.characterCount}자 — 나의 취향 탭에서 조절",
+                fontSize = 13.sp,
+                color = BrandTheme.labelSecondary(appearance),
+                modifier = Modifier.testTag("composer.styleSummary")
+            )
+        }
 
         AiChoiceButtons(viewModel, state)
 
@@ -480,16 +468,15 @@ private fun CreationColumn(
                                 .hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
                             if (!hasCamera) {
                                 viewModel.cameraUnavailable()
-                            } else if (
-                                Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
-                                ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.WRITE_EXTERNAL_STORAGE
-                                ) != PackageManager.PERMISSION_GRANTED
-                            ) {
-                                storagePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                             } else {
-                                cameraCaptureRequest += 1
+                                val permissions = buildList {
+                                    add(Manifest.permission.CAMERA)
+                                    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                                }.filter {
+                                    ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+                                }
+                                if (permissions.isEmpty()) showsContinuousCamera = true
+                                else cameraPermissionLauncher.launch(permissions.toTypedArray())
                             }
                         },
                         modifier = Modifier
@@ -666,19 +653,22 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
     val appearance = LocalAppAppearance.current
     val showsExternalAIBrowser by viewModel.profileStore.showsExternalAIBrowser.collectAsStateWithLifecycle()
     val trimmedIdeaEmpty = state.idea.trim().isEmpty()
-    var selectedChoiceId by rememberSaveable { mutableStateOf(AIChoice.External(DirectAIProvider.GEMINI).id) }
-    val selectedChoice = AIChoice.all.firstOrNull { it.id == selectedChoiceId } ?: AIChoice.all.first()
+    val isEnabled = !trimmedIdeaEmpty && !state.isGenerating
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         val columns = if (LocalDensity.current.fontScale >= 1.3f) 2 else 4
         AIChoice.all.chunked(columns).forEach { rowChoices ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 rowChoices.forEach { choice ->
                     AIChoiceCard(
                         choice = choice,
-                        selected = choice.id == selectedChoiceId,
-                        enabled = !state.isGenerating,
-                        onClick = { selectedChoiceId = choice.id },
+                        enabled = isEnabled,
+                        onClick = {
+                            when (choice) {
+                                AIChoice.OnDevice -> viewModel.generateDraft()
+                                is AIChoice.External -> viewModel.startExternalGeneration(choice.provider)
+                            }
+                        },
                         modifier = Modifier
                             .weight(1f)
                             .testTag("composer.ai.${choice.id}")
@@ -694,36 +684,10 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
                 state = state,
                 appearance = appearance
             )
-        } else {
-            GlossyPrimaryButton(
-                onClick = {
-                    when (selectedChoice) {
-                        AIChoice.OnDevice -> viewModel.generateDraft()
-                        is AIChoice.External -> {
-                            viewModel.startExternalAIGeneration(selectedChoice.provider)
-                        }
-                    }
-                },
-                enabled = !trimmedIdeaEmpty && !state.isGenerating,
-                appearance = appearance,
-                modifier = Modifier.testTag("composer.ai.run")
-            ) {
-                Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(9.dp))
-                Text(
-                    when (selectedChoice) {
-                        AIChoice.OnDevice -> "기기 AI로 만들기"
-                        is AIChoice.External -> "${selectedChoice.provider.title}에서 만들기"
-                    },
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-            }
         }
 
         val pendingProvider = state.pendingExternalProvider
-        if (pendingProvider != null) {
+        if (pendingProvider != null && !state.isGenerating) {
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -731,7 +695,7 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
                     .background(BrandTheme.accent.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
                     .clickable {
                         val text = viewModel.readClipboard(context)
-                        viewModel.importAIResult(text, pendingProvider)
+                        viewModel.importAIResult(text, pendingProvider, context)
                     }
                     .testTag("composer.paste"),
                 horizontalArrangement = Arrangement.Center,
@@ -768,10 +732,10 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
                 viewModel.onAutomationFallbackRequired(reason)
             },
             onError = { err ->
-                viewModel.onAutomationError(err)
+                viewModel.onAutomationError(err, automationProvider)
             },
             onSuccess = { answer ->
-                viewModel.importAIResult(answer, automationProvider)
+                viewModel.importAIResult(answer, automationProvider, context)
             }
         )
     }
@@ -788,14 +752,21 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
             fallbackReason = state.fallbackReason,
             prompt = viewModel.externalPrompt(),
             onClose = {
-                if (showsExternalAIBrowser) viewModel.cancelGeneration()
-                else viewModel.dismissFallbackBrowser()
+                if (showsExternalAIBrowser) {
+                    if (viewModel.state.value.isGenerating) {
+                        viewModel.cancelGeneration()
+                    }
+                } else {
+                    viewModel.dismissFallbackBrowser()
+                }
             },
             onSubmitted = viewModel::onAutomationSubmitted,
-            onError = viewModel::onAutomationError,
+            onError = { err ->
+                viewModel.onAutomationError(err, automationProvider)
+            },
             autoImportOnComplete = true,
             onImport = { text ->
-                viewModel.importAIResult(text, automationProvider)
+                viewModel.importAIResult(text, automationProvider, context)
             },
             appearance = appearance
         )
@@ -844,6 +815,15 @@ private fun GenerationStatusCard(
                 color = BrandTheme.labelSecondary(appearance),
                 maxLines = 1
             )
+            if (state.automationPhase == ExternalAIAutomationPhase.SUBMITTED ||
+                state.automationPhase == ExternalAIAutomationPhase.WAITING_ELAPSED
+            ) {
+                LinearProgressIndicator(
+                    progress = { ExternalAITimerFormatter.progress(state.automationElapsedSeconds) },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = BrandTheme.accent
+                )
+            }
         }
 
         TextButton(
@@ -866,86 +846,48 @@ private fun HiddenExternalAIWebView(
     onError: (String?) -> Unit,
     onSuccess: (String) -> Unit
 ) {
-    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var webViewRef by remember(requestId) { mutableStateOf<WebView?>(null) }
-    var stabilityState by remember(requestId) { mutableStateOf(ExternalAIStabilityState()) }
-    var isSubmitted by remember(requestId) { mutableStateOf(false) }
-    var isPolling by remember(requestId) { mutableStateOf(false) }
+    var isAutomationActive by remember(requestId) { mutableStateOf(true) }
+    val timings = ExternalAITimingProfile.DEFAULT
 
-    LaunchedEffect(isPolling, requestId) {
-        if (isPolling) {
-            while (isPolling) {
-                delay(1800L)
-                val wv = webViewRef ?: break
-                if (!isPolling) break
-
-                // 오류와 답변 추출을 순차적으로 확인해 동일 틱에서
-                // onError와 onSuccess가 동시에 발생하는 중복 종료 이벤트를 막는다.
-                val domErr = suspendCancellableCoroutine<ExternalAIDomErrorResult> { cont ->
-                    wv.evaluateJavascript(ExternalAIScripts.extractErrorScript()) { errRes ->
-                        cont.resume(ExternalAIScripts.parseErrorResult(errRes), null)
-                    }
-                }
-                if (!isPolling) break
-                if (domErr.hasError && !domErr.error.isNullOrBlank()) {
-                    isPolling = false
-                    onError(domErr.error)
-                    break
-                }
-
-                val poll = suspendCancellableCoroutine<ExternalAIPollResult> { cont ->
-                    wv.evaluateJavascript(ExternalAIScripts.extractAnswerScript(provider)) { ansRes ->
-                        cont.resume(ExternalAIScripts.parsePollResult(ansRes), null)
-                    }
-                }
-                if (!isPolling) break
-                val next = ExternalAIStabilityReducer.step(stabilityState, poll)
-                stabilityState = next
-                if (next.isStable && next.stableAnswer != null) {
-                    isPolling = false
-                    onSuccess(next.stableAnswer)
-                }
+    DisposableEffect(requestId, provider) {
+        val hostView = context.findActivity()?.window?.decorView as? ViewGroup
+        val density = context.resources.displayMetrics.density
+        val wv = WebView(context).apply {
+            alpha = 0.001f
+            isClickable = false
+            isFocusable = false
+            importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                databaseEnabled = true
+                loadWithOverviewMode = true
+                useWideViewPort = true
+                mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                cacheMode = WebSettings.LOAD_DEFAULT
+                userAgentString = userAgentString.replace("; wv", "")
             }
-        }
-    }
-
-    Box(
-        modifier = Modifier
-            .size(0.dp)
-            .graphicsLayer { alpha = 0f }
-            .clearAndSetSemantics { }
-    ) {
-        AndroidView(
-            factory = { ctx ->
-                WebView(ctx).apply {
-                    layoutParams = ViewGroup.LayoutParams(1080, 2400)
-                    settings.apply {
-                        javaScriptEnabled = true
-                        domStorageEnabled = true
-                        databaseEnabled = true
-                        loadWithOverviewMode = true
-                        useWideViewPort = true
-                        mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                        cacheMode = WebSettings.LOAD_DEFAULT
-                        userAgentString = userAgentString.replace("; wv", "")
-                    }
-
-                    val cookieManager = CookieManager.getInstance()
-                    cookieManager.setAcceptCookie(true)
-                    cookieManager.setAcceptThirdPartyCookies(this, true)
-
-                    webViewClient = object : WebViewClient() {
+            val cookieManager = CookieManager.getInstance()
+            cookieManager.setAcceptCookie(true)
+            cookieManager.setAcceptThirdPartyCookies(this, true)
+            webViewClient = object : WebViewClient() {
                         override fun shouldOverrideUrlLoading(
                             view: WebView?,
                             request: WebResourceRequest?
                         ): Boolean {
                             val targetUrl = request?.url?.toString()
                             if (!ExternalAISecurityPolicy.isAllowedUrl(targetUrl, provider)) {
+                                isAutomationActive = false
+                                onFallbackRequired(ExternalAIFallbackReason.NAVIGATION_DISALLOWED)
                                 return true
                             }
                             val fallback = ExternalAIFallbackClassifier.classifyUrl(targetUrl)
                             if (fallback != null) {
+                                isAutomationActive = false
                                 onFallbackRequired(fallback)
+                                return true
                             }
                             return false
                         }
@@ -956,72 +898,229 @@ private fun HiddenExternalAIWebView(
 
                             val fallback = ExternalAIFallbackClassifier.classifyUrl(url)
                             if (fallback != null) {
+                                isAutomationActive = false
                                 onFallbackRequired(fallback)
-                                return
-                            }
-
-                            view?.evaluateJavascript(ExternalAIScripts.checkChallengeScript()) { chRes ->
-                                if (ExternalAIScripts.parseChallengeResult(chRes)) {
-                                    onFallbackRequired(ExternalAIFallbackReason.SECURITY_VERIFICATION)
-                                    return@evaluateJavascript
-                                }
-
-                                if (!isSubmitted && prompt.isNotBlank()) {
-                                    // 재진입/중복 onPageFinished 호출로 인한 이중 제출을 막기 위해
-                                    // 실제 전송 성공 여부와 무관하게 시도 시점에 즉시 플래그를 세운다.
-                                    isSubmitted = true
-                                    scope.launch {
-                                        delay(1000L)
-                                        val script = ExternalAIScripts.injectPromptScript(provider, prompt)
-                                        view.evaluateJavascript(script) { injRes ->
-                                            val injection = ExternalAIScripts.parseInjectionResult(injRes)
-                                            if (!injection.inputFound) {
-                                                isSubmitted = false
-                                                onFallbackRequired(ExternalAIFallbackReason.MANUAL_INPUT_REQUIRED)
-                                            } else if (!injection.submitted) {
-                                                isSubmitted = false
-                                                onFallbackRequired(ExternalAIFallbackReason.MANUAL_CONFIRMATION)
-                                            } else {
-                                                onSubmitted()
-                                                isPolling = true
-                                            }
-                                        }
-                                    }
-                                }
                             }
                         }
 
                         override fun onReceivedError(
                             view: WebView?,
-                            errorCode: Int,
-                            description: String?,
-                            failingUrl: String?
+                            request: WebResourceRequest?,
+                            error: WebResourceError?
                         ) {
-                            super.onReceivedError(view, errorCode, description, failingUrl)
-                            if (failingUrl == provider.url) {
-                                onError(description)
+                            super.onReceivedError(view, request, error)
+                            if (request?.isForMainFrame == true) {
+                                val desc = error?.description?.toString() ?: "연결 실패"
+                                isAutomationActive = false
+                                val sanitized = ExternalAIErrorSanitizer.sanitize("Network error: $desc", provider)
+                                onError(sanitized)
                             }
                         }
-                    }
-
-                    loadUrl(provider.url)
-                    webViewRef = this
-                }
-            },
-            update = { wv ->
-                webViewRef = wv
+            }
+            loadUrl(provider.url)
+        }
+        hostView?.addView(
+            wv,
+            FrameLayout.LayoutParams((375 * density).toInt(), (667 * density).toInt(), Gravity.TOP or Gravity.START).apply {
+                leftMargin = -10_000
             }
         )
+        webViewRef = wv
+        onDispose {
+            isAutomationActive = false
+            wv.stopLoading()
+            hostView?.removeView(wv)
+            wv.destroy()
+            webViewRef = null
+        }
     }
 
-    DisposableEffect(requestId) {
-        onDispose {
-            webViewRef?.let { wv ->
-                wv.stopLoading()
-                wv.destroy()
+    // AIBI State Machine Coroutine (Readiness -> Submission -> Observation)
+    LaunchedEffect(requestId) {
+        delay(700L)
+        val wv = webViewRef ?: return@LaunchedEffect
+        val readinessStart = System.currentTimeMillis()
+        var baselineCount = 0
+        var promptInjected = false
+
+        // 1. 준비(Readiness) 및 주입 루프 (700ms 주기, readinessTimeoutMs 제한)
+        while (isAutomationActive && System.currentTimeMillis() - readinessStart < timings.readinessTimeoutMs && !promptInjected) {
+            val currentUrl = wv.url
+            if (currentUrl.isNullOrBlank() || currentUrl == "about:blank") {
+                delay(timings.readinessCadenceMs)
+                continue
             }
-            webViewRef = null
-            isPolling = false
+            if (!ExternalAISecurityPolicy.canInjectScript(currentUrl, provider)) {
+                val reason = ExternalAIFallbackClassifier.classifyUrl(currentUrl)
+                    ?: ExternalAIFallbackReason.NAVIGATION_DISALLOWED
+                isAutomationActive = false
+                onFallbackRequired(reason)
+                return@LaunchedEffect
+            }
+            val readinessRes = suspendCancellableCoroutine<String?> { cont ->
+                wv.evaluateJavascript(ExternalAIScripts.checkReadinessScript(provider)) { cont.resume(it) }
+            }
+
+            if (readinessRes != null && readinessRes != "null") {
+                val readiness = ExternalAIScripts.parseReadinessResult(readinessRes)
+                val isReady = readiness.isReady
+                val reason = readiness.reason
+
+                when (reason) {
+                    "AUTH_REQUIRED" -> {
+                        isAutomationActive = false
+                        onFallbackRequired(ExternalAIFallbackReason.LOGIN_REQUIRED)
+                        return@LaunchedEffect
+                    }
+                    "SECURITY_CHALLENGE_PRESENTED" -> {
+                        isAutomationActive = false
+                        onFallbackRequired(ExternalAIFallbackReason.SECURITY_VERIFICATION)
+                        return@LaunchedEffect
+                    }
+                }
+
+                if (isReady) {
+                    // 어시스턴트 기준선 기록
+                    val baselineRes = suspendCancellableCoroutine<String?> { cont ->
+                        wv.evaluateJavascript(ExternalAIScripts.recordBaselineScript(provider)) { cont.resume(it) }
+                    }
+                    baselineCount = ExternalAIScripts.parseBaselineCount(baselineRes)
+
+                    // 프롬프트 주입
+                    val injectScript = ExternalAIScripts.injectPromptScript(provider, prompt, force = false)
+                    val injectRes = suspendCancellableCoroutine<String?> { cont ->
+                        wv.evaluateJavascript(injectScript) { cont.resume(it) }
+                    }
+                    val injection = ExternalAIScripts.parseInjectionResult(injectRes)
+                    if (injection.success && injection.inputFound) {
+                        wv.evaluateJavascript("if(document.activeElement){document.activeElement.blur();}", null)
+                        wv.clearFocus()
+                        (context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+                            ?.hideSoftInputFromWindow(wv.windowToken, 0)
+                        promptInjected = true
+                        break
+                    }
+                }
+            }
+
+            delay(timings.readinessCadenceMs)
+        }
+
+        if (!promptInjected) {
+            isAutomationActive = false
+            onFallbackRequired(ExternalAIFallbackReason.MANUAL_INPUT_REQUIRED)
+            return@LaunchedEffect
+        }
+
+        // 2. 전송(Submission) 에스컬레이션 루프 (15초 제한, 500ms 주기 + 700ms 검증)
+        var submitted = false
+        val submitStart = System.currentTimeMillis()
+        var attempt = 1
+
+        while (isAutomationActive && System.currentTimeMillis() - submitStart < timings.submitTimeoutMs && !submitted) {
+            if (attempt == 1) {
+                val targetResult = suspendCancellableCoroutine<String?> { cont ->
+                    wv.evaluateJavascript(ExternalAIScripts.submitTargetScript(provider)) { cont.resume(it) }
+                }
+                val target = ExternalAIScripts.parseSubmitPoint(targetResult)
+                if (target != null) {
+                    val x = target.first * wv.width
+                    val y = target.second * wv.height
+                    val downTime = SystemClock.uptimeMillis()
+                    MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, x, y, 0).also {
+                        it.source = InputDevice.SOURCE_TOUCHSCREEN
+                        wv.dispatchTouchEvent(it)
+                        it.recycle()
+                    }
+                    delay(80L)
+                    MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, x, y, 0).also {
+                        it.source = InputDevice.SOURCE_TOUCHSCREEN
+                        wv.dispatchTouchEvent(it)
+                        it.recycle()
+                    }
+                } else {
+                    wv.evaluateJavascript(ExternalAIScripts.submitPromptScript(provider, attempt), null)
+                }
+            } else if (attempt == 2) {
+                wv.evaluateJavascript(ExternalAIScripts.focusInputScript(provider), null)
+                wv.requestFocus()
+                delay(80L)
+                wv.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+                wv.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+            } else {
+                wv.evaluateJavascript(ExternalAIScripts.submitPromptScript(provider, attempt), null)
+            }
+
+            // 검증 지연 700ms
+            delay(timings.submitVerificationDelayMs)
+
+            // 전송 검증
+            val verifyScript = ExternalAIScripts.verifySubmissionScript(provider, baselineCount)
+            val verifyRes = suspendCancellableCoroutine<String?> { cont ->
+                wv.evaluateJavascript(verifyScript) { cont.resume(it) }
+            }
+
+            if (ExternalAIScripts.parseSubmissionVerified(verifyRes)) {
+                submitted = true
+                onSubmitted()
+                break
+            }
+
+            attempt++
+            delay(timings.submitCadenceMs)
+        }
+
+        if (!submitted) {
+            isAutomationActive = false
+            onFallbackRequired(ExternalAIFallbackReason.MANUAL_CONFIRMATION)
+            return@LaunchedEffect
+        }
+
+        // 3. 관찰(Observation) 루프 (700ms 주기, 3회 연속 일치 관측 시 완성)
+        var stability = ExternalAIStabilityState()
+        while (isAutomationActive) {
+            delay(timings.observationCadenceMs)
+            if (!isAutomationActive) break
+
+            // 오류 감지 (오류는 브라우저를 열지 않고 즉시 중단)
+            val errScript = ExternalAIScripts.extractErrorScript()
+            val errRes = suspendCancellableCoroutine<String?> { cont ->
+                wv.evaluateJavascript(errScript) { cont.resume(it) }
+            }
+            val domErr = ExternalAIScripts.parseErrorResult(errRes)
+            if (domErr.hasError && !domErr.error.isNullOrBlank()) {
+                isAutomationActive = false
+                val sanitized = ExternalAIErrorSanitizer.sanitize(domErr.error, provider)
+                onError(sanitized)
+                return@LaunchedEffect
+            }
+
+            // 보안 챌린지 검사
+            val chScript = ExternalAIScripts.checkChallengeScript()
+            val chRes = suspendCancellableCoroutine<String?> { cont ->
+                wv.evaluateJavascript(chScript) { cont.resume(it) }
+            }
+            if (ExternalAIScripts.parseChallengeResult(chRes)) {
+                isAutomationActive = false
+                onFallbackRequired(ExternalAIFallbackReason.SECURITY_VERIFICATION)
+                return@LaunchedEffect
+            }
+
+            // 답변 관찰
+            val ansScript = ExternalAIScripts.extractAnswerScript(provider)
+            val ansRes = suspendCancellableCoroutine<String?> { cont ->
+                wv.evaluateJavascript(ansScript) { cont.resume(it) }
+            }
+            val poll = ExternalAIScripts.parsePollResult(ansRes)
+
+            val nextStability = ExternalAIStabilityReducer.step(stability, poll)
+            stability = nextStability
+
+            if (nextStability.isStable && nextStability.stableAnswer != null) {
+                isAutomationActive = false
+                onSuccess(nextStability.stableAnswer)
+                return@LaunchedEffect
+            }
         }
     }
 }
@@ -1029,7 +1128,6 @@ private fun HiddenExternalAIWebView(
 @Composable
 private fun AIChoiceCard(
     choice: AIChoice,
-    selected: Boolean,
     enabled: Boolean = true,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1037,46 +1135,39 @@ private fun AIChoiceCard(
 ) {
     val isBk = appearance == AppAppearance.BK
     val shape = RoundedCornerShape(13.dp)
-    val bg = if (isBk) {
-        if (selected) Color.White else Color(0xFFF7F8FA)
-    } else {
-        if (selected) BrandTheme.paper else BrandTheme.surface
-    }
-    val border = if (selected) {
-        BorderStroke(1.5.dp, if (enabled) BrandTheme.accent else BrandTheme.accent.copy(alpha = 0.5f))
-    } else {
-        BorderStroke(1.dp, if (isBk) Color(0xFFE2E6EC) else BrandTheme.border)
-    }
+    val bg = if (isBk) Color.White else BrandTheme.surface(appearance)
+    val border = BorderStroke(1.dp, if (isBk) Color(0xFFE2E6EC) else BrandTheme.border)
 
     Column(
         modifier = modifier
-            .heightIn(min = 72.dp)
+            .heightIn(min = 62.dp)
             .graphicsLayer {
-                if (!enabled) {
-                    alpha = 0.55f
-                }
+                alpha = if (enabled) 1f else 0.46f
             }
             .border(border, shape)
             .background(bg, shape)
-            .semantics { this.selected = selected }
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 5.dp, vertical = 9.dp),
+            .padding(horizontal = 2.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(7.dp)
+        verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
-        when (choice) {
-            AIChoice.OnDevice -> IconWell(
-                icon = Icons.Filled.AutoAwesome,
-                appearance = appearance,
-                variant = if (selected) IconWellVariant.ACCENT else IconWellVariant.CARBON,
-                size = 28.dp,
-                iconSize = 18.dp
-            )
-            is AIChoice.External -> BrandIcon(choice.provider)
+        Box(
+            modifier = Modifier.size(32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            when (choice) {
+                AIChoice.OnDevice -> Icon(
+                    imageVector = Icons.Filled.AutoAwesome,
+                    contentDescription = null,
+                    tint = BrandTheme.labelPrimary(appearance),
+                    modifier = Modifier.size(24.dp)
+                )
+                is AIChoice.External -> BrandIcon(choice.provider)
+            }
         }
         Text(
             choice.title,
-            fontSize = 12.sp,
+            fontSize = 9.sp,
             fontWeight = FontWeight.SemiBold,
             color = BrandTheme.labelPrimary(appearance),
             maxLines = 1
@@ -1130,38 +1221,32 @@ private fun BrandIcon(provider: DirectAIProvider) {
             painter = painterResource(R.drawable.brand_chatgpt),
             contentDescription = provider.title,
             modifier = Modifier
-                .size(26.dp)
+                .size(32.dp)
                 .clip(RoundedCornerShape(7.dp))
         )
         DirectAIProvider.GEMINI -> Image(
             painter = painterResource(R.drawable.brand_gemini),
             contentDescription = provider.title,
             modifier = Modifier
-                .size(26.dp)
+                .size(32.dp)
                 .clip(RoundedCornerShape(7.dp))
         )
-        DirectAIProvider.CLAUDE -> Box(
+        DirectAIProvider.CLAUDE -> Image(
+            painter = painterResource(R.drawable.brand_claude),
+            contentDescription = provider.title,
             modifier = Modifier
-                .size(26.dp)
-                .background(Color(0xFFD97706), RoundedCornerShape(7.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                "C",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-        }
+                .size(32.dp)
+                .clip(RoundedCornerShape(7.dp))
+        )
         DirectAIProvider.GROK -> Box(
             modifier = Modifier
-                .size(26.dp)
+                .size(32.dp)
                 .background(Color.Black, RoundedCornerShape(7.dp)),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 "G",
-                fontSize = 16.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
@@ -1609,15 +1694,14 @@ private fun PreviewColumn(viewModel: ComposerViewModel, state: ComposerUiState) 
                     .fillMaxWidth()
                     .padding(vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                IconWell(
-                    icon = Icons.Outlined.Description,
-                    appearance = appearance,
-                    size = 24.dp,
-                    iconSize = 14.dp
+                Icon(
+                    Icons.Outlined.Description,
+                    contentDescription = null,
+                    tint = BrandTheme.labelSecondary(appearance),
+                    modifier = Modifier.size(16.dp)
                 )
-                Spacer(Modifier.width(4.dp))
                 Text(
                     "게시물을 만들면 여기에 표시됩니다",
                     fontSize = 15.sp,

@@ -93,9 +93,10 @@ class ExternalAIDraftUtilsTest {
     }
 
     @Test
-    fun `대기 상태 문구는 경과 시간을 감싸서 반환한다`() {
-        assertEquals("답변을 기다리는 중 (00초)", ExternalAITimerFormatter.formatWaitingStatus(0))
-        assertEquals("답변을 기다리는 중 (1분 00초)", ExternalAITimerFormatter.formatWaitingStatus(60))
+    fun `대기 상태 문구는 1분 59초 역카운터를 반환한다`() {
+        assertEquals("남은 시간 1:59", ExternalAITimerFormatter.formatWaitingStatus(0))
+        assertEquals("남은 시간 0:59", ExternalAITimerFormatter.formatWaitingStatus(60))
+        assertEquals("남은 시간 0:00", ExternalAITimerFormatter.formatWaitingStatus(119))
     }
 
     // MARK: - ExternalAIFallbackClassifier

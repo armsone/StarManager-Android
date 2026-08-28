@@ -18,9 +18,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -344,30 +346,34 @@ fun DirectUpdateSettings(manager: DirectUpdateManager) {
     val state by manager.state.collectAsStateWithLifecycle()
     val activity = LocalContext.current.findActivity()
     Column(
-        Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("업데이트 자동 다운로드", modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("자동 다운로드", modifier = Modifier.weight(1f))
             Switch(checked = state.automaticDownload, onCheckedChange = manager::setAutomaticDownload)
         }
-        Text(state.message)
+        HorizontalDivider()
         state.size?.let { total ->
             val progress = if (total > 0) (state.downloaded.toFloat() / total).coerceIn(0f, 1f) else 0f
             if (state.phase == UpdatePhase.DOWNLOADING) LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-            Text("${state.version ?: "-"} · 빌드 ${state.build ?: "확인 예정"} · ${formatBytes(total)}")
+            Text("${state.version ?: "-"} · ${formatBytes(total)}")
         }
-        state.notes?.takeIf { it.isNotBlank() }?.let { Text(it, maxLines = 4) }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(state.message, modifier = Modifier.weight(1f))
             when (state.phase) {
                 UpdatePhase.AVAILABLE -> Button(onClick = { manager.download() }) { Text("다운로드") }
                 UpdatePhase.DOWNLOADING -> Button(onClick = manager::cancel) { Text("취소") }
                 UpdatePhase.READY -> Button(onClick = { activity?.let(manager::handoffInstaller) }) { Text("설치") }
                 UpdatePhase.ERROR -> Button(onClick = manager::retry) { Text("다시 시도") }
-                else -> Unit
-            }
-            Button(enabled = state.phase != UpdatePhase.CHECKING && state.phase != UpdatePhase.DOWNLOADING, onClick = { manager.check() }) {
-                Text("업데이트 확인")
+                else -> TextButton(
+                    enabled = state.phase != UpdatePhase.CHECKING,
+                    onClick = { manager.check() }
+                ) { Text("확인") }
             }
         }
     }

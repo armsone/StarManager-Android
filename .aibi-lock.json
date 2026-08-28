@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "repositories": {
+    "starmanager-android": {
+      "version": "0.1.1",
+      "files": {
+        "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAIModels.kt": {
+          "sha256": "5d733554ad9d2679e04fff3f939e5482b292b0dcd20f661127547c6a7145ea33",
+          "source": "profiles/starmanager/distribution/android/ExternalAIModels.kt"
+        },
+        "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAIScripts.kt": {
+          "sha256": "dab988501f3edeb1c695a0ccacc82e25f204158965e79610e78b2b0d3d94899e",
+          "source": "profiles/starmanager/distribution/android/ExternalAIScripts.kt"
+        },
+        "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAISecurityPolicy.kt": {
+          "sha256": "8689c99c4335b23ad626011c4f60152d087b088c9bcbe4d898a3e038043a5ce9",
+          "source": "profiles/starmanager/distribution/android/ExternalAISecurityPolicy.kt"
+        },
+        "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAIAnswerCleaner.kt": {
+          "sha256": "a71184ef7e60890ace3c674f7d63654b627b247b3a4df89912a05ca742810285",
+          "source": "profiles/starmanager/distribution/android/ExternalAIAnswerCleaner.kt"
+        },
+        "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAIErrorSanitizer.kt": {
+          "sha256": "c22202d4ad8daee7d5fe38dd50f2832ba1675cd453dfc80caf512faf9bc34f69",
+          "source": "profiles/starmanager/distribution/android/ExternalAIErrorSanitizer.kt"
+        },
+        "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAIFallbackClassifier.kt": {
+          "sha256": "7fa9f1b9044be82faca43f50a49b19597bbf0f30d4107f641278825eb2e43f0b",
+          "source": "profiles/starmanager/distribution/android/ExternalAIFallbackClassifier.kt"
+        },
+        "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAITimerFormatter.kt": {
+          "sha256": "571a86318777664d8f9cce4ba730cab1327de5665ba8dbbca47808086e768035",
+          "source": "profiles/starmanager/distribution/android/ExternalAITimerFormatter.kt"
+        },
+        "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAIAuthStatus.kt": {
+          "sha256": "da998e1ca21cf96155f3c82fb71bcd46c934cb8a91108eaca0ccc9ea8c8100d1",
+          "source": "profiles/starmanager/distribution/android/ExternalAIAuthStatus.kt"
+        }
+      }
+    }
+  },
+  "consumer": "starmanager",
+  "aibiVersion": "0.1.1"
+}

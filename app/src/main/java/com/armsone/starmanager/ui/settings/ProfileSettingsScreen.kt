@@ -37,7 +37,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -70,6 +72,8 @@ import com.armsone.starmanager.model.PostLength
 import com.armsone.starmanager.model.PostMood
 import com.armsone.starmanager.model.WritingPreset
 import com.armsone.starmanager.service.DirectAIProvider
+import com.armsone.starmanager.ui.externalai.ExternalAIAuthStatus
+import com.armsone.starmanager.ui.externalai.ExternalAIAuthState
 import com.armsone.starmanager.ui.externalai.ExternalAISurface
 import com.armsone.starmanager.ui.externalai.ExternalAISurfaceMode
 import com.armsone.starmanager.update.DirectUpdateManager
@@ -98,6 +102,20 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
 
     var presetName by rememberSaveable { mutableStateOf("") }
     var activeLoginProvider by remember { mutableStateOf<DirectAIProvider?>(null) }
+    val loginProviders = remember {
+        listOf(DirectAIProvider.GEMINI, DirectAIProvider.OPEN_AI, DirectAIProvider.CLAUDE)
+    }
+    var authStates by remember {
+        mutableStateOf(loginProviders.associateWith { ExternalAIAuthState.CHECKING })
+    }
+    var refreshTrigger by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(refreshTrigger) {
+        loginProviders.forEach { provider ->
+            val state = ExternalAIAuthStatus.probe(context, provider)
+            authStates = authStates + (provider to state)
+        }
+    }
 
     Box(
         Modifier
@@ -351,7 +369,7 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                 SettingsSection(
                     header = "외부 AI 로그인 관리",
                     icon = Icons.Filled.AccountCircle,
-                    footer = "브라우저 보기는 기본적으로 꺼져 있어요. 처음 로그인하면 각 서비스의 공식 페이지가 뜨고, 스타매니저는 비밀번호를 보거나 저장하지 않아요.",
+                    footer = "한 번 로그인하면 이 기기에서 계속 사용해요. 비밀번호는 저장하지 않아요.",
                     appearance = appearance,
                     variant = IconWellVariant.CARBON
                 ) {
@@ -386,6 +404,7 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                         if (index > 0) {
                             HorizontalDivider(color = BrandTheme.divider(appearance))
                         }
+                        val state = authStates[provider] ?: ExternalAIAuthState.CHECKING
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -402,13 +421,30 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                                 color = BrandTheme.labelPrimary(appearance),
                                 modifier = Modifier.weight(1f)
                             )
-                            Text(
-                                "로그인 열기",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = BrandTheme.accent,
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 modifier = Modifier.testTag("settings.login.${provider.rawValue}")
-                            )
+                            ) {
+                                if (state == ExternalAIAuthState.LOGGED_IN) {
+                                    Icon(
+                                        Icons.Filled.CheckCircle,
+                                        contentDescription = null,
+                                        tint = Color(0xFF34C759),
+                                        modifier = Modifier.size(17.dp)
+                                    )
+                                }
+                                Text(
+                                    state.label,
+                                    fontSize = 15.sp,
+                                    fontWeight = if (state == ExternalAIAuthState.REQUIRES_LOGIN) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = when (state) {
+                                        ExternalAIAuthState.REQUIRES_LOGIN -> BrandTheme.accent
+                                        ExternalAIAuthState.LOGGED_IN -> Color(0xFF34C759)
+                                        ExternalAIAuthState.CHECKING -> BrandTheme.labelSecondary(appearance)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -454,6 +490,9 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
             mode = ExternalAISurfaceMode.LOGIN,
             prompt = "",
             onClose = { activeLoginProvider = null },
+            onLoginSuccess = {
+                authStates = authStates + (loginProvider to ExternalAIAuthState.LOGGED_IN)
+            },
             appearance = appearance
         )
     }
