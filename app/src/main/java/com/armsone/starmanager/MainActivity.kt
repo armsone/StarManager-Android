@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,9 +24,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,10 +44,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -139,7 +144,7 @@ fun StarManagerTheme(
 
 private enum class AppTab(val title: String) {
     COMPOSER("스튜디오"),
-    SETTINGS("나의 취향")
+    SETTINGS("설정")
 }
 
 @Composable
@@ -147,7 +152,6 @@ private fun StarManagerApp(profileStore: CreatorProfileStore) {
     val appearance = LocalAppAppearance.current
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var showsResetConfirmation by rememberSaveable { mutableStateOf(false) }
-    var exitAfterReset by rememberSaveable { mutableStateOf(false) }
     val composerViewModel: ComposerViewModel = viewModel()
     composerViewModel.profileStore = profileStore
 
@@ -158,18 +162,16 @@ private fun StarManagerApp(profileStore: CreatorProfileStore) {
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        // 인라인 네비게이션 타이틀 + 선행 아이콘 웰
+        // 인라인 네비게이션 타이틀 + 런처 아이콘
         TopBar(
-            title = if (selectedTab == 0) "스타메니저" else "나의 취향",
+            title = if (selectedTab == 0) "스타메니저" else "설정",
             appearance = appearance,
             onCancel = if (selectedTab == 0) {
                 {
                     if (composerViewModel.hasContent()) {
-                        exitAfterReset = true
                         showsResetConfirmation = true
                     } else {
                         composerViewModel.resetComposer()
-                        selectedTab = 1
                     }
                 }
             } else null
@@ -186,11 +188,9 @@ private fun StarManagerApp(profileStore: CreatorProfileStore) {
             selectedIndex = selectedTab,
             appearance = appearance,
             onSelect = {
-                exitAfterReset = false
                 selectedTab = it
             },
             onReset = {
-                exitAfterReset = false
                 selectedTab = 0
                 if (composerViewModel.hasContent()) {
                     showsResetConfirmation = true
@@ -205,19 +205,14 @@ private fun StarManagerApp(profileStore: CreatorProfileStore) {
         AlertDialog(
             onDismissRequest = {
                 showsResetConfirmation = false
-                exitAfterReset = false
             },
             title = { Text("새 이야기로 시작할까요?") },
-            text = { Text("현재 이야기, 만든 게시물과 미디어를 비웁니다. 내 프로필과 설정은 그대로 유지됩니다.") },
+            text = { Text("현재 이야기, 만든 게시물과 미디어를 비웁니다. 설정은 그대로 유지됩니다.") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         composerViewModel.resetComposer()
                         showsResetConfirmation = false
-                        if (exitAfterReset) {
-                            selectedTab = 1
-                            exitAfterReset = false
-                        }
                     },
                     modifier = Modifier.testTag("composer.resetConfirm")
                 ) {
@@ -228,7 +223,6 @@ private fun StarManagerApp(profileStore: CreatorProfileStore) {
                 TextButton(
                     onClick = {
                         showsResetConfirmation = false
-                        exitAfterReset = false
                     },
                     modifier = Modifier.testTag("composer.resetCancel")
                 ) {
@@ -266,16 +260,61 @@ private fun TopBar(
                 Text("취소", fontSize = 16.sp, color = BrandTheme.labelPrimary(appearance))
             }
         }
-        Text(
-            title,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = BrandTheme.labelPrimary(appearance)
-        )
+
+        if (title == "스타메니저") {
+            val launcherIconRes = if (appearance == AppAppearance.CLASSIC) {
+                R.drawable.starmanager_app_icon_classic
+            } else {
+                R.drawable.starmanager_app_icon
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.semantics(mergeDescendants = true) {
+                    contentDescription = "스타메니저"
+                }
+            ) {
+                Image(
+                    painter = painterResource(launcherIconRes),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(22.dp)
+                        .clip(RoundedCornerShape(6.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                Text(
+                    title,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = BrandTheme.labelPrimary(appearance)
+                )
+            }
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.semantics(mergeDescendants = true) {
+                    contentDescription = title
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = null,
+                    tint = BrandTheme.labelPrimary(appearance),
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    title,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = BrandTheme.labelPrimary(appearance)
+                )
+            }
+        }
     }
 }
 
-/** 탭바 — 스튜디오/새 캔버스/나의 취향 */
+/** 탭바 — 스튜디오/새 캔버스/설정 */
 @Composable
 private fun BottomTabBar(
     selectedIndex: Int,
@@ -368,6 +407,6 @@ private fun BottomTabButton(
 }
 
 private fun tabIcon(tab: AppTab): ImageVector = when (tab) {
-    AppTab.COMPOSER -> Icons.Filled.AutoAwesome    // sparkles 근사
-    AppTab.SETTINGS -> Icons.Filled.AccountCircle  // person.crop.circle 근사
+    AppTab.COMPOSER -> Icons.Filled.AutoAwesome
+    AppTab.SETTINGS -> Icons.Filled.Settings
 }

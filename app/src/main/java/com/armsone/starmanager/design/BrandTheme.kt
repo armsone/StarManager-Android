@@ -3,11 +3,14 @@ package com.armsone.starmanager.design
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -16,8 +19,10 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.armsone.starmanager.model.AppAppearance
 
 val LocalAppAppearance = staticCompositionLocalOf { AppAppearance.BK }
@@ -148,7 +153,6 @@ fun Modifier.starCard(appearance: AppAppearance = AppAppearance.BK): Modifier {
             .padding(18.dp)
     }
 }
-
 /** 취향/선호 설정 전용 옥스블러드 카드 Modifier */
 fun Modifier.oxbloodPreferenceCard(appearance: AppAppearance = AppAppearance.BK): Modifier {
     return if (appearance == AppAppearance.BK) {
@@ -244,5 +248,37 @@ fun IconWell(
                 modifier = Modifier.size(iconSize)
             )
         }
+    }
+}
+
+/**
+ * 섹션 제목 행 — 선행 아이콘 웰과 함께 제목을 표시한다.
+ */
+@Composable
+fun BrandSectionTitle(
+    title: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    appearance: AppAppearance = LocalAppAppearance.current,
+    variant: IconWellVariant = IconWellVariant.CARBON
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        IconWell(
+            icon = icon,
+            appearance = appearance,
+            variant = variant,
+            size = 24.dp,
+            iconSize = 14.dp
+        )
+        Text(
+            text = title,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = BrandTheme.labelPrimary(appearance)
+        )
     }
 }

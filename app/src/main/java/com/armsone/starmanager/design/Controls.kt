@@ -9,6 +9,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -92,11 +93,56 @@ fun StarSegmentedControl(
                     text = option,
                     fontSize = 13.sp,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (isBk) BrandTheme.bkLabelPrimary else BrandTheme.labelPrimary,
+                    color = if (selected) {
+                        if (isBk) BrandTheme.bkLabelPrimary else BrandTheme.labelPrimary
+                    } else {
+                        if (isBk) BrandTheme.bkLabelSecondary else BrandTheme.labelSecondary
+                    },
                     textAlign = TextAlign.Center,
                     maxLines = 1
                 )
             }
+        }
+    }
+}
+
+/**
+ * 4~5개 이상의 선택지일 때 좁은 화면에서 찌그러지지 않도록 2줄로 나누어 표시하는 적응형 세그먼트 컨트롤.
+ */
+@Composable
+fun StarAdaptiveSegmentedControl(
+    options: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    appearance: AppAppearance = LocalAppAppearance.current
+) {
+    if (options.size <= 3) {
+        StarSegmentedControl(
+            options = options,
+            selectedIndex = selectedIndex,
+            onSelect = onSelect,
+            modifier = modifier,
+            appearance = appearance
+        )
+    } else {
+        val firstRowCount = if (options.size == 4) 2 else 3
+        val firstRowOptions = options.take(firstRowCount)
+        val secondRowOptions = options.drop(firstRowCount)
+
+        Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            StarSegmentedControl(
+                options = firstRowOptions,
+                selectedIndex = if (selectedIndex in 0 until firstRowCount) selectedIndex else -1,
+                onSelect = { onSelect(it) },
+                appearance = appearance
+            )
+            StarSegmentedControl(
+                options = secondRowOptions,
+                selectedIndex = if (selectedIndex >= firstRowCount) selectedIndex - firstRowCount else -1,
+                onSelect = { onSelect(firstRowCount + it) },
+                appearance = appearance
+            )
         }
     }
 }

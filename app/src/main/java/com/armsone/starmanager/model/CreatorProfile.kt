@@ -2,109 +2,352 @@ package com.armsone.starmanager.model
 
 import java.util.UUID
 
-/** iOS CreatorProfile.swift 포팅. 기본값과 프롬프트 조립을 그대로 유지한다. */
+/**
+ * 프로필 및 작성 취향 설정. iOS CreatorProfile.swift 포팅.
+ * 기본값은 사용자의 자유 입력을 위해 비워두며, Typed Enum 기반으로 프롬프트를 구성한다.
+ */
 data class CreatorProfile(
-    val accountTopic: String = "나의 일상과 경험",
-    val voice: String = "다정하고 솔직하게",
-    val audience: String = "내 이야기에 공감하는 사람들",
+    val accountTopic: String = "",
+    val voice: String = "",
+    val audience: String = "",
     val preferredLength: PostLength = PostLength.MEDIUM,
-    val usesEmoji: Boolean = true,
+    val emojiIntensity: EmojiIntensity = EmojiIntensity.LOW,
     val prohibitedPhrases: String = "",
-    val hashtagStyle: String = "핵심 키워드 중심",
-    val writingGuidelines: String = DEFAULT_WRITING_GUIDELINES,
+    val hashtagStyle: String = "",
+    val detailedGuidelines: String = "",
+    val destination: PostDestination = PostDestination.INSTAGRAM,
+    val ageGroup: AudienceAgeGroup = AudienceAgeGroup.XZ,
+    val style: PostStyle = PostStyle.MEMO,
+    val tone: PostTone = PostTone.KIND,
+    val lineBreakFrequency: LineBreakFrequency = LineBreakFrequency.MODERATE,
+    val writingGuidelines: String = "",
     val generationControls: GenerationControls? = null,
     val additionalInstructions: String? = null,
     val mood: PostMood = PostMood.WITTY,
-    val selectedGenerationStyle: GenerationStylePreset? = GenerationStylePreset.GENERATION_386
+    val selectedGenerationStyle: GenerationStylePreset? = null
 ) {
     val controls: GenerationControls
         get() = generationControls ?: GenerationControls()
 
+    val usesEmoji: Boolean
+        get() = emojiIntensity != EmojiIntensity.NONE
+
     fun withControls(newControls: GenerationControls): CreatorProfile =
         copy(generationControls = newControls)
+
+    fun clampCharacterCountToDestinationLimit(): CreatorProfile {
+        val limit = destination.characterLimit
+        val maxAllowed = minOf(500, limit)
+        val clamped = controls.characterCount.coerceIn(50, maxAllowed)
+        return copy(generationControls = controls.copy(characterCount = clamped))
+    }
 
     fun generationPrompt(
         idea: String,
         mood: PostMood = this.mood,
         length: PostLength = this.preferredLength
-    ): String = buildString {
-        append("[내가 입력한 내용]\n")
-        append(idea.trim())
-        append("\n\n[원하는 결과]\n")
-        append("다른 설명 없이 완성된 인스타그램 본문 산문만 작성해 주세요.\n")
-        append("- 공백과 줄바꿈을 포함해 정확히 ${controls.characterCount}자로 작성\n")
-        append("- 첫 줄에 한글 해시태그 2개 연속 작성\n")
-        append("- 본문: ${mood.rawValue}, $voice, ${length.promptInstruction}\n")
-        append("- 문장마다 줄바꿈하고 상투적인 표현 없이 자연스럽게 작성\n")
-        if (usesEmoji) {
-            append("- 본문 이모지는 문단 앞쪽에만 절제해서 사용\n")
-        } else {
-            append("- 마지막 요약 줄의 필수 이모지를 제외하고 본문 이모지는 사용하지 않음\n")
-        }
-        append("- 마지막 줄은 전체 요약 1줄로 작성하고 앞뒤에 이모지 배치\n")
-        val cleanProhibited = prohibitedPhrases.trim()
-        if (cleanProhibited.isNotEmpty()) {
-            append("- 금지 표현: $cleanProhibited\n")
-        }
-        val cleanHashtag = hashtagStyle.trim()
-        if (cleanHashtag.isNotEmpty()) {
-            append("- 해시태그 취향: $cleanHashtag\n")
-        }
-        val extra = (additionalInstructions ?: "").trim()
-        if (extra.isNotEmpty()) {
-            append("\n[추가 요청]\n")
-            append(extra)
-        }
-    }.trimEnd()
+    ): String {
+        val trimmed = idea.trim()
+        val count = controls.characterCount
+        val parts = mutableListOf<String>()
 
-    fun prompt(idea: String): String {
-        val activeGuidelines = writingGuidelines
-            .split("\n")
-            .filter { line ->
-                !line.contains("공백 포함 200자") &&
-                    !line.contains("감동 20% / 친절함 20%")
-            }
-            .joinToString("\n")
-        val extra = (additionalInstructions ?: "").trim()
-        return buildString {
-            append(activeGuidelines)
-            append("\n\n")
-            append("아래 현재 설정을 기존 지침의 수치보다 최우선으로 적용:\n")
-            append("- 공백 포함 ${controls.characterCount}자 정확히 준수\n")
-            append("- 감동 ${controls.emotion}% / 친절함 ${controls.kindness}% / 참신함 ${controls.originality}% / 남자다움 ${controls.masculinity}% / 시크함 ${controls.chic}%\n")
-            append("- 계정 주제: $accountTopic\n")
-            append("- 주요 독자: $audience\n")
-            append("- 나의 말투: $voice\n")
-            append("- 본문 이모지 사용: ${if (usesEmoji) "문단 앞쪽에만 절제해서 사용" else "마지막 요약 줄의 필수 이모지를 제외하고 사용하지 않음"}\n")
-            append("- 금지 표현: ${prohibitedPhrases.ifEmpty { "없음" }}\n")
-            append("- 해시태그 취향: $hashtagStyle\n")
-            append(if (extra.isEmpty()) "" else "- 추가 옵션: $extra")
-            append("\n\n")
-            append("작성할 이야기:\n")
-            append(idea)
+        parts.add("[내가 입력한 내용]\n$trimmed")
+
+        val resultLines = mutableListOf<String>()
+        resultLines.add("위 내용을 바탕으로 ${destination.title}에 올릴 한국어 글을 쓰고, 완성 문구만 출력해.")
+        resultLines.add("- 게시 기준: ${destination.limitBasisDescription}")
+        resultLines.add("- 목표 분량: 공백과 줄바꿈 포함 ${count}자를 넘지 않는 선에서 자연스럽게 (억지로 글자 수를 맞추려고 문장을 늘리거나 자르지 마)")
+        resultLines.add("- 나잇대: ${ageGroup.promptAudienceHint}")
+        resultLines.add("- 분위기: ${mood.rawValue}")
+        resultLines.add("- 원문 반영: ${length.promptInstruction}")
+        resultLines.add("- 이모지 사용: ${emojiIntensity.promptInstruction}")
+        resultLines.add("- 스타일: ${style.promptInstruction}")
+        resultLines.add("- 말투: ${tone.promptInstruction}")
+        resultLines.add("- 줄넘김: ${lineBreakFrequency.promptInstruction}")
+
+        if (accountTopic.isNotBlank()) {
+            resultLines.add("- 주로 쓰는 주제: ${accountTopic.trim()}")
         }
+        if (audience.isNotBlank()) {
+            resultLines.add("- 읽을 사람: ${audience.trim()}")
+        }
+        if (prohibitedPhrases.isNotBlank()) {
+            resultLines.add("- 금지 표현: ${prohibitedPhrases.trim()}")
+        }
+        if (hashtagStyle.isNotBlank()) {
+            resultLines.add("- 해시태그 취향: ${hashtagStyle.trim()}")
+        }
+        if (detailedGuidelines.isNotBlank()) {
+            resultLines.add("- 추가로 하고 싶은 설정: ${detailedGuidelines.trim()}")
+        }
+        if (!additionalInstructions.isNullOrBlank()) {
+            resultLines.add("- 그 외 요청: ${additionalInstructions.trim()}")
+        }
+
+        parts.add("[원하는 결과]\n" + resultLines.joinToString("\n"))
+        return parts.joinToString("\n\n")
+    }
+
+    fun photoOnlyPrompt(
+        mood: PostMood = this.mood,
+        length: PostLength = this.preferredLength
+    ): String {
+        val count = controls.characterCount
+        val parts = mutableListOf<String>()
+
+        parts.add("[상황]\n대표 사진 한 장이 함께 첨부돼 있어. 사진을 실제로 살펴보고, 사진에 없는 내용은 지어내지 마.")
+
+        val resultLines = mutableListOf<String>()
+        resultLines.add("사진 속 장면과 분위기를 바탕으로 ${destination.title}에 올릴 한국어 글을 쓰고, 완성 문구만 출력해.")
+        resultLines.add("- 게시 기준: ${destination.limitBasisDescription}")
+        resultLines.add("- 목표 분량: 공백과 줄바꿈 포함 ${count}자를 넘지 않는 선에서 자연스럽게")
+        resultLines.add("- 나잇대: ${ageGroup.promptAudienceHint}")
+        resultLines.add("- 분위기: ${mood.rawValue}, ${length.promptInstruction}")
+        resultLines.add("- 이모지 사용: ${emojiIntensity.promptInstruction}")
+        resultLines.add("- 스타일: ${style.promptInstruction}")
+        resultLines.add("- 말투: ${tone.promptInstruction}")
+        resultLines.add("- 줄넘김: ${lineBreakFrequency.promptInstruction}")
+
+        if (accountTopic.isNotBlank()) {
+            resultLines.add("- 주로 쓰는 주제: ${accountTopic.trim()}")
+        }
+        if (audience.isNotBlank()) {
+            resultLines.add("- 읽을 사람: ${audience.trim()}")
+        }
+        if (prohibitedPhrases.isNotBlank()) {
+            resultLines.add("- 금지 표현: ${prohibitedPhrases.trim()}")
+        }
+        if (hashtagStyle.isNotBlank()) {
+            resultLines.add("- 해시태그 취향: ${hashtagStyle.trim()}")
+        }
+        if (detailedGuidelines.isNotBlank()) {
+            resultLines.add("- 추가로 하고 싶은 설정: ${detailedGuidelines.trim()}")
+        }
+        if (!additionalInstructions.isNullOrBlank()) {
+            resultLines.add("- 그 외 요청: ${additionalInstructions.trim()}")
+        }
+
+        parts.add("[원하는 결과]\n" + resultLines.joinToString("\n"))
+        return parts.joinToString("\n\n")
+    }
+
+    fun photoAndTextPrompt(
+        idea: String,
+        mood: PostMood = this.mood,
+        length: PostLength = this.preferredLength
+    ): String {
+        val trimmed = idea.trim()
+        val count = controls.characterCount
+        val parts = mutableListOf<String>()
+
+        parts.add("[상황]\n대표 사진 한 장과 내가 적은 메모가 함께 있어. 사진을 실제로 살펴보고, 사진과 메모 둘 다에 어울리는 글을 써 줘. 사진에 없는 내용은 지어내지 마.")
+        parts.add("[내가 입력한 내용]\n$trimmed")
+
+        val resultLines = mutableListOf<String>()
+        resultLines.add("사진과 위 내용을 함께 반영한 ${destination.title}용 한국어 글을 쓰고, 완성 문구만 출력해.")
+        resultLines.add("- 게시 기준: ${destination.limitBasisDescription}")
+        resultLines.add("- 목표 분량: 공백과 줄바꿈 포함 ${count}자를 넘지 않는 선에서 자연스럽게")
+        resultLines.add("- 나잇대: ${ageGroup.promptAudienceHint}")
+        resultLines.add("- 분위기: ${mood.rawValue}, ${length.promptInstruction}")
+        resultLines.add("- 이모지 사용: ${emojiIntensity.promptInstruction}")
+        resultLines.add("- 스타일: ${style.promptInstruction}")
+        resultLines.add("- 말투: ${tone.promptInstruction}")
+        resultLines.add("- 줄넘김: ${lineBreakFrequency.promptInstruction}")
+
+        if (accountTopic.isNotBlank()) {
+            resultLines.add("- 주로 쓰는 주제: ${accountTopic.trim()}")
+        }
+        if (audience.isNotBlank()) {
+            resultLines.add("- 읽을 사람: ${audience.trim()}")
+        }
+        if (prohibitedPhrases.isNotBlank()) {
+            resultLines.add("- 금지 표현: ${prohibitedPhrases.trim()}")
+        }
+        if (hashtagStyle.isNotBlank()) {
+            resultLines.add("- 해시태그 취향: ${hashtagStyle.trim()}")
+        }
+        if (detailedGuidelines.isNotBlank()) {
+            resultLines.add("- 추가로 하고 싶은 설정: ${detailedGuidelines.trim()}")
+        }
+        if (!additionalInstructions.isNullOrBlank()) {
+            resultLines.add("- 그 외 요청: ${additionalInstructions.trim()}")
+        }
+
+        parts.add("[원하는 결과]\n" + resultLines.joinToString("\n"))
+        return parts.joinToString("\n\n")
     }
 
     companion object {
-        val DEFAULT_WRITING_GUIDELINES = """
-            인스타그램에 올릴 글로 작성해줘. 아래의 내용을 참고해
-            - 결과만 출력
-            - 인스타그램용 산문
-            - 공백 포함 200자 정확히 준수
-            - 감동 20% / 친절함 20% / 참신함 30% / 남자다움 20% / 시크함 10%
-            - 혼잣말처럼 서술
-            - 흔하지 않은 유의어 사용
-            - 라임과 리듬 살릴 것
-            - 문장 중간 따옴표 사용 가능
-            - 전체 따옴표 사용 금지
-            - 마침표 있으면 무조건 줄바꿈
-            - 쉼표도 문맥에 맞게 가능하면 줄바꿈
-            - 첫 줄에 한글 태그 2개 연속
-            - 이모티콘은 첫줄 빼고 문단 앞쪽에만 절제해서 사용
-            - 마지막 줄은 전체 요약 1줄 + 이모티콘 앞뒤 배치
-            - 글자수 표기 금지
-        """.trimIndent()
+        val DEFAULT_WRITING_GUIDELINES = ""
     }
+}
+
+/** 게시물 목적지 및 글자 수 한도 */
+enum class PostDestination(
+    val title: String,
+    val characterLimit: Int,
+    val limitBasisDescription: String
+) {
+    INSTAGRAM(
+        title = "Instagram",
+        characterLimit = 2200,
+        limitBasisDescription = "Instagram 캡션 최대 2,200자 기준"
+    ),
+    KAKAO_TALK(
+        title = "카카오톡",
+        characterLimit = 200,
+        limitBasisDescription = "카카오톡 공유(퍼가기) 메시지 문구 최대 200자 기준 (일반 채팅 글자 수 제한이 아님)"
+    ),
+    X(
+        title = "X",
+        characterLimit = 280,
+        limitBasisDescription = "X 기본 게시물 최대 280자 기준 (Premium은 더 긴 게시물을 지원하지만 기본값은 280자)"
+    )
+}
+
+/** 이모지 사용 강도 */
+enum class EmojiIntensity(
+    val title: String,
+    val promptInstruction: String
+) {
+    NONE(
+        title = "안 씀",
+        promptInstruction = "이모지를 전혀 사용하지 않는다"
+    ),
+    LOW(
+        title = "최소한",
+        promptInstruction = "꼭 필요한 곳에만 아주 가끔 이모지를 사용한다"
+    ),
+    HIGH(
+        title = "적극적",
+        promptInstruction = "문단마다 어울리는 이모지를 적극적으로 사용한다"
+    ),
+    HEAVY(
+        title = "과하게",
+        promptInstruction = "문장마다 이모지를 과감하게 여러 개 사용한다"
+    )
+}
+
+/** 타깃 독자 나잇대 (프롬프트 전용 힌트) */
+enum class AudienceAgeGroup(
+    val title: String,
+    val promptAudienceHint: String
+) {
+    XZ(
+        title = "XZ",
+        promptAudienceHint = "XZ세대(10~20대)가 편하게 느낄 감각으로"
+    ),
+    X(
+        title = "X",
+        promptAudienceHint = "X세대(40~50대)가 편하게 느낄 감각으로"
+    ),
+    THREE_EIGHT_SIX(
+        title = "386",
+        promptAudienceHint = "386세대(50~60대)가 편하게 느낄 감각으로"
+    ),
+    KKONDAE(
+        title = "꼰대",
+        promptAudienceHint = "꼰대 감성을 흉내 내는 재미있는 톤으로"
+    )
+}
+
+/** 게시물 작성 스타일 */
+enum class PostStyle(
+    val title: String,
+    val promptInstruction: String
+) {
+    MEMO(
+        title = "메모",
+        promptInstruction = "짧고 간결한 메모 형식으로"
+    ),
+    POEM(
+        title = "시",
+        promptInstruction = "시적인 형식으로, 행과 여백을 살려서"
+    ),
+    DIARY(
+        title = "일기",
+        promptInstruction = "그날의 일을 적는 일기 형식으로"
+    ),
+    ESSAY(
+        title = "수필",
+        promptInstruction = "생각과 경험을 풀어내는 수필 형식으로"
+    ),
+    NOVEL(
+        title = "소설",
+        promptInstruction = "소설처럼 장면과 서사가 있는 형식으로"
+    )
+}
+
+/** 게시물 말투/어조 */
+enum class PostTone(
+    val title: String,
+    val promptInstruction: String
+) {
+    CHIC(
+        title = "시크하게",
+        promptInstruction = "감정을 절제하고 쿨하게 시크한 말투로"
+    ),
+    FRESH(
+        title = "참신하게",
+        promptInstruction = "뻔하지 않고 참신한 표현을 쓰는 말투로"
+    ),
+    KIND(
+        title = "친절하게",
+        promptInstruction = "다정하고 친절한 말투로"
+    )
+}
+
+/** 줄넘김 빈도 */
+enum class LineBreakFrequency(
+    val title: String,
+    val promptInstruction: String
+) {
+    FREQUENT(
+        title = "자주",
+        promptInstruction = "짧은 문장마다 자주 줄을 바꿔서"
+    ),
+    MINIMAL(
+        title = "최소",
+        promptInstruction = "줄바꿈을 최소로 줄이고 문단을 길게 이어서"
+    ),
+    MODERATE(
+        title = "적당히",
+        promptInstruction = "문단 단위로 적당히 줄을 바꿔서"
+    )
+}
+
+/** 원문 반영 정도 */
+enum class PostLength(
+    val rawValue: String,
+    val storyWeightTitle: String,
+    val storyWeightExplanation: String,
+    val promptInstruction: String
+) {
+    SHORT(
+        rawValue = "짧게",
+        storyWeightTitle = "핵심만",
+        storyWeightExplanation = "내가 쓴 글의 핵심만 남기고, 표현과 비유는 AI가 새로 씁니다",
+        promptInstruction = "입력한 이야기의 핵심만 남기고 새로운 비유와 해석을 적극적으로 더할 것"
+    ),
+    MEDIUM(
+        rawValue = "보통",
+        storyWeightTitle = "균형 있게",
+        storyWeightExplanation = "내가 쓴 글과 AI의 새 표현을 절반 정도씩 섞습니다",
+        promptInstruction = "입력한 이야기와 새로운 해석을 균형 있게 섞을 것"
+    ),
+    LONG(
+        rawValue = "길게",
+        storyWeightTitle = "최대한 유지",
+        storyWeightExplanation = "내가 쓴 문장과 표현을 최대한 그대로 살리고, AI는 다듬기만 합니다",
+        promptInstruction = "입력한 이야기의 장면과 표현을 최대한 많이 살리고 과도한 각색은 줄일 것"
+    )
+}
+
+/** 분위기 3종 */
+enum class PostMood(val rawValue: String) {
+    WARM("따뜻하게"),
+    WITTY("재치 있게"),
+    CALM("담백하게")
 }
 
 data class GenerationControls(
@@ -117,13 +360,12 @@ data class GenerationControls(
 ) {
     val toneTotal: Int get() = emotion + kindness + originality + masculinity + chic
 
-    /** Swift String(describing:) 형식 — 결정적 시드 계산에 사용된다. */
     fun swiftDescription(): String =
         "GenerationControls(characterCount: $characterCount, emotion: $emotion, " +
             "kindness: $kindness, originality: $originality, masculinity: $masculinity, chic: $chic)"
 }
 
-/** iOS GenerationStylePreset — 4가지 스타일. */
+/** 레거시 스타일 프리셋 (하위 호환 유지용) */
 enum class GenerationStylePreset(val rawValue: String) {
     MZ("mz"),
     GEN_X("genX"),
@@ -146,48 +388,47 @@ enum class GenerationStylePreset(val rawValue: String) {
             BABY_BOOM -> "라떼는 진하게, 잔소리는 짧게"
         }
 
-    /** 글자 수는 유지하고 말투/이모지/추가 지침/톤 배분만 적용한다. */
     fun applyingTo(profile: CreatorProfile): CreatorProfile {
-        val characterCount = profile.controls.characterCount
         return when (this) {
             MZ -> profile.copy(
-                voice = "짧고 빠른 호흡으로, 눈치 빠른 한마디와 신선한 비유를 섞어 재치 있게",
-                usesEmoji = true,
-                additionalInstructions = "억지 유행어는 피하고 설명보다 장면, 장면보다 한 방 있는 말맛을 먼저 보여주기",
-                generationControls = GenerationControls(characterCount, 15, 15, 45, 5, 20),
+                ageGroup = AudienceAgeGroup.XZ,
+                tone = PostTone.FRESH,
+                style = PostStyle.MEMO,
+                emojiIntensity = EmojiIntensity.HIGH,
                 selectedGenerationStyle = MZ
             )
             GEN_X -> profile.copy(
-                voice = "속은 뜨겁지만 겉은 쿨하게, 낭만과 현실을 한 문장 안에서 교차시키며",
-                usesEmoji = false,
-                additionalInstructions = "과한 신파 없이 장면은 선명하게, 결론은 무심한 듯 멋있게 남기기",
-                generationControls = GenerationControls(characterCount, 25, 15, 25, 15, 20),
+                ageGroup = AudienceAgeGroup.X,
+                tone = PostTone.CHIC,
+                style = PostStyle.ESSAY,
+                emojiIntensity = EmojiIntensity.NONE,
                 selectedGenerationStyle = GEN_X
             )
             GENERATION_386 -> profile.copy(
-                voice = "살아본 사람의 현실감은 살리되 정답을 강요하지 않고 유쾌하게",
-                usesEmoji = false,
-                additionalInstructions = "성공담보다 시행착오를 앞세우고, 잔소리가 될 순간에는 자조적인 유머로 방향 틀기",
-                generationControls = GenerationControls(characterCount, 20, 25, 15, 25, 15),
+                ageGroup = AudienceAgeGroup.THREE_EIGHT_SIX,
+                tone = PostTone.KIND,
+                style = PostStyle.DIARY,
+                emojiIntensity = EmojiIntensity.NONE,
                 selectedGenerationStyle = GENERATION_386
             )
             BABY_BOOM -> profile.copy(
-                voice = "라떼 한 잔 같은 연륜을 깔고, 스스로도 웃을 줄 아는 능청스러운 꼰대 말투로",
-                usesEmoji = false,
-                additionalInstructions = "한 번쯤 훈계할 듯 운을 떼되 결론에서는 자기 흑역사를 꺼내 웃음과 쓸 만한 지혜를 함께 남기기",
-                generationControls = GenerationControls(characterCount, 30, 35, 10, 15, 10),
+                ageGroup = AudienceAgeGroup.KKONDAE,
+                tone = PostTone.CHIC,
+                style = PostStyle.NOVEL,
+                emojiIntensity = EmojiIntensity.NONE,
                 selectedGenerationStyle = BABY_BOOM
             )
         }
     }
 }
 
+/** 레거시 프리셋 데이터 구조 (하위 호환 및 보관용) */
 data class WritingPreset(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
-    val controls: GenerationControls,
+    val controls: GenerationControls = GenerationControls(),
     val additionalInstructions: String = "",
-    val writingGuidelines: String = CreatorProfile.DEFAULT_WRITING_GUIDELINES,
+    val writingGuidelines: String = "",
     val accountTopic: String? = null,
     val voice: String? = null,
     val audience: String? = null,
@@ -203,42 +444,12 @@ data class WritingPreset(
             WritingPreset(name = "균형 잡힌 기본", controls = GenerationControls()),
             WritingPreset(
                 name = "감성적인 기록",
-                controls = GenerationControls(250, 40, 25, 20, 5, 10),
-                additionalInstructions = "잔잔한 여운과 따뜻한 장면 묘사를 강조"
+                controls = GenerationControls(250)
             ),
             WritingPreset(
                 name = "참신하고 시크하게",
-                controls = GenerationControls(180, 10, 10, 40, 15, 25),
-                additionalInstructions = "군더더기 없이 낯선 비유와 짧은 호흡을 사용"
+                controls = GenerationControls(180)
             )
         )
     }
-}
-
-/** iOS PostLength — 이야기 비중 3단계. */
-enum class PostLength(val rawValue: String) {
-    SHORT("짧게"),
-    MEDIUM("보통"),
-    LONG("길게");
-
-    val storyWeightTitle: String
-        get() = when (this) {
-            SHORT -> "낮게"
-            MEDIUM -> "보통"
-            LONG -> "높게"
-        }
-
-    val promptInstruction: String
-        get() = when (this) {
-            SHORT -> "입력한 이야기의 핵심만 남기고 새로운 비유와 해석을 적극적으로 더할 것"
-            MEDIUM -> "입력한 이야기와 새로운 해석을 균형 있게 섞을 것"
-            LONG -> "입력한 이야기의 장면과 표현을 최대한 많이 살리고 과도한 각색은 줄일 것"
-        }
-}
-
-/** iOS PostMood — 3가지 분위기. */
-enum class PostMood(val rawValue: String) {
-    WARM("따뜻하게"),
-    WITTY("재치 있게"),
-    CALM("담백하게")
 }

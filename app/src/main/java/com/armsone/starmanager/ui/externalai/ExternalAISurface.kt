@@ -39,10 +39,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -86,6 +86,7 @@ fun ExternalAISurface(
     provider: DirectAIProvider,
     mode: ExternalAISurfaceMode,
     prompt: String = "",
+    attachment: ExternalAIAttachment? = null,
     fallbackReason: ExternalAIFallbackReason? = null,
     onClose: () -> Unit,
     onLoginSuccess: () -> Unit = {},
@@ -147,7 +148,7 @@ fun ExternalAISurface(
         onClose()
     }
 
-    // 자동 제출 시도 (15초 루프, 500ms 주기 + 700ms 검증)
+    // 자동 제출 시도
     suspend fun submitPromptWhenReady(wv: WebView, baselineCount: Int): Boolean {
         if (hasSubmittedPrompt) return true
         submitFailed = false
@@ -155,7 +156,6 @@ fun ExternalAISurface(
         var attempt = 1
 
         while (System.currentTimeMillis() - startTime < 15_000L && !hasSubmittedPrompt && !hasImportedAnswer) {
-            // 일부 제공자는 JavaScript click()의 비신뢰 이벤트를 거부한다. 첫 시도는 실제 WebView 터치로 보낸다.
             if (attempt == 1) {
                 val targetResult = suspendCancellableCoroutine<String?> { cont ->
                     wv.evaluateJavascript(ExternalAIScripts.submitTargetScript(provider)) { cont.resume(it) }
@@ -180,7 +180,6 @@ fun ExternalAISurface(
                     wv.evaluateJavascript(ExternalAIScripts.submitPromptScript(provider, attempt), null)
                 }
             } else if (attempt == 2) {
-                // Claude 등 비신뢰 click()을 거부하는 편집기는 실제 Enter 키 이벤트로 전송한다.
                 wv.evaluateJavascript(ExternalAIScripts.focusInputScript(provider), null)
                 wv.requestFocus()
                 delay(80L)
@@ -190,10 +189,8 @@ fun ExternalAISurface(
                 wv.evaluateJavascript(ExternalAIScripts.submitPromptScript(provider, attempt), null)
             }
 
-            // 검증 지연 700ms
             delay(700L)
 
-            // 전송 검증
             val verifyScript = ExternalAIScripts.verifySubmissionScript(provider, baselineCount)
             val verifyResult = suspendCancellableCoroutine<String?> { cont ->
                 wv.evaluateJavascript(verifyScript) { cont.resume(it) }
@@ -216,7 +213,7 @@ fun ExternalAISurface(
         return hasSubmittedPrompt
     }
 
-    // 프롬프트 입력 시도 (force=false: 사용자 입력 텍스트 보호)
+    // 프롬프트 입력 시도
     suspend fun fillPrompt(wv: WebView, force: Boolean): Boolean {
         val script = ExternalAIScripts.injectPromptScript(provider, prompt, force = force)
         val result = suspendCancellableCoroutine<String?> { cont ->
@@ -226,7 +223,6 @@ fun ExternalAISurface(
         return if (injection.success && injection.inputFound) {
             hasFilledPrompt = true
             fillFailed = false
-            // focus()로 열린 IME가 제공사 전송 버튼을 가리지 않도록 입력 반영 후 즉시 정리한다.
             wv.evaluateJavascript("if(document.activeElement){document.activeElement.blur();}", null)
             wv.clearFocus()
             (context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
@@ -251,11 +247,9 @@ fun ExternalAISurface(
 
         val currentUrl = wv.url
         if (!ExternalAISecurityPolicy.canInjectScript(currentUrl, provider)) {
-            // 인증/로그인 오리진이나 챌린지 오리진에서는 스크립트를 주입하지 않고 브라우저를 열어둔다.
             return@LaunchedEffect
         }
 
-        // 스크립트 오리진으로 진입 시 기존 URL 기반 LOGIN_REQUIRED 잔여 상태 정리
         if (detectedFallbackReason == ExternalAIFallbackReason.LOGIN_REQUIRED) {
             detectedFallbackReason = null
         }
@@ -293,9 +287,9 @@ fun ExternalAISurface(
         }
     }
 
-    // 메인 프레임 내비게이션 완료 시 45초 자동 채우기 및 전송 루프 실행
+    // 메인 프레임 내비게이션 완료 시 자동 채우기 및 전송 루프 실행
     LaunchedEffect(navigationGeneration) {
-        if (mode.isLogin || prompt.isBlank() || hasSubmittedPrompt || hasImportedAnswer) return@LaunchedEffect
+        if (mode.isLogin || (prompt.isBlank() && attachment == null) || hasSubmittedPrompt || hasImportedAnswer) return@LaunchedEffect
         val wv = webViewRef ?: return@LaunchedEffect
         if (!ExternalAISecurityPolicy.canInjectScript(wv.url, provider)) return@LaunchedEffect
         isAutoFilling = true
@@ -303,10 +297,10 @@ fun ExternalAISurface(
         val startTime = System.currentTimeMillis()
         var baselineCaptured = false
         var baselineCount = 0
+        var attachmentHandled = (attachment == null)
 
         while (isActive && System.currentTimeMillis() - startTime < 45_000L && !hasSubmittedPrompt && !hasImportedAnswer) {
             if (isPageReady) {
-                // 새 답변 판정 기준선은 작업당 한 번만 저장한다. 재시도 중 덮어쓰면 완성 답변을 놓친다.
                 if (!baselineCaptured) {
                     val baselineScript = ExternalAIScripts.recordBaselineScript(provider)
                     val baselineRes = suspendCancellableCoroutine<String?> { cont ->
@@ -316,14 +310,28 @@ fun ExternalAISurface(
                     baselineCaptured = true
                 }
 
-                if (fillPrompt(wv, force = false)) {
-                    delay(350L)
-                    if (submitPromptWhenReady(wv, baselineCount)) {
-                        isAutoFilling = false
-                        return@LaunchedEffect
+                if (!attachmentHandled && attachment != null) {
+                    val attachScript = ExternalAIScripts.attachPhotoScript(provider, attachment)
+                    wv.evaluateJavascript(attachScript, null)
+                    delay(800L)
+                    val confirmScript = ExternalAIScripts.checkAttachmentConfirmedScript(provider)
+                    val confirmRes = suspendCancellableCoroutine<String?> { cont ->
+                        wv.evaluateJavascript(confirmScript) { cont.resume(it) }
                     }
-                    // ChatGPT 지연 렌더링으로 입력창이 재교체된 경우 입력 완료 상태 되돌리고 재시도
-                    hasFilledPrompt = false
+                    if (ExternalAIScripts.parseAttachmentConfirmed(confirmRes)) {
+                        attachmentHandled = true
+                    }
+                }
+
+                if (attachmentHandled || attachment == null) {
+                    if (fillPrompt(wv, force = false)) {
+                        delay(350L)
+                        if (submitPromptWhenReady(wv, baselineCount)) {
+                            isAutoFilling = false
+                            return@LaunchedEffect
+                        }
+                        hasFilledPrompt = false
+                    }
                 }
             }
             delay(700L)
@@ -335,7 +343,7 @@ fun ExternalAISurface(
         }
     }
 
-    // 답변 관찰 루프 (700ms 주기, 3회 연속 일치 관측 시 안정 판정)
+    // 답변 관찰 루프
     LaunchedEffect(hasSubmittedPrompt, navigationGeneration) {
         if (mode.isLogin || !hasSubmittedPrompt || hasImportedAnswer) return@LaunchedEffect
         val wv = webViewRef ?: return@LaunchedEffect
@@ -345,7 +353,6 @@ fun ExternalAISurface(
         while (isActive && !hasImportedAnswer) {
             delay(700L)
 
-            // 오류 감지
             val errorScript = ExternalAIScripts.extractErrorScript()
             val errorRes = suspendCancellableCoroutine<String?> { cont ->
                 wv.evaluateJavascript(errorScript) { cont.resume(it) }
@@ -359,7 +366,6 @@ fun ExternalAISurface(
                 return@LaunchedEffect
             }
 
-            // 답변 관찰
             val script = ExternalAIScripts.extractAnswerScript(provider)
             val answerRes = suspendCancellableCoroutine<String?> { cont ->
                 wv.evaluateJavascript(script) { cont.resume(it) }
@@ -385,7 +391,7 @@ fun ExternalAISurface(
         }
     }
 
-    // 남은 시간 역카운터 (전송 후 119초에서 자동 취소)
+    // 남은 시간 역카운터
     LaunchedEffect(hasSubmittedPrompt, hasImportedAnswer) {
         if (hasSubmittedPrompt && !hasImportedAnswer) {
             elapsedSeconds = 0L
@@ -550,7 +556,7 @@ fun ExternalAISurface(
                 }
             }
 
-            // 폴백 사유 배너 (iPhone fallbackBanner와 1:1 일치)
+            // 폴백 사유 배너
             AnimatedVisibility(visible = effectiveFallbackReason != null) {
                 effectiveFallbackReason?.let { reason ->
                     Row(
@@ -566,6 +572,7 @@ fun ExternalAISurface(
                             imageVector = when (reason) {
                                 ExternalAIFallbackReason.LOGIN_REQUIRED -> Icons.Filled.Warning
                                 ExternalAIFallbackReason.SECURITY_VERIFICATION -> Icons.Filled.Shield
+                                ExternalAIFallbackReason.ATTACHMENT_FAILED -> Icons.Filled.Photo
                                 else -> Icons.Filled.Warning
                             },
                             contentDescription = null,

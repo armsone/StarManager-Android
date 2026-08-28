@@ -3,8 +3,8 @@ package com.armsone.starmanager.service
 import com.armsone.starmanager.model.CaptionValidationContext
 import com.armsone.starmanager.model.CaptionValidationReport
 import com.armsone.starmanager.model.CreatorProfile
+import com.armsone.starmanager.model.EmojiIntensity
 import com.armsone.starmanager.model.GeneratedPost
-import com.armsone.starmanager.model.GenerationControls
 import com.armsone.starmanager.model.PostLength
 import com.armsone.starmanager.model.PostMood
 import com.armsone.starmanager.text.Graphemes
@@ -63,11 +63,17 @@ object ExternalPromptBuilder {
     fun build(profile: CreatorProfile, idea: String, mood: PostMood, length: PostLength): String =
         profile.generationPrompt(idea, mood, length)
 
+    fun buildPhotoOnly(profile: CreatorProfile, mood: PostMood, length: PostLength): String =
+        profile.photoOnlyPrompt(mood, length)
+
+    fun buildPhotoAndText(profile: CreatorProfile, idea: String, mood: PostMood, length: PostLength): String =
+        profile.photoAndTextPrompt(idea, mood, length)
+
     fun validationContext(profile: CreatorProfile): CaptionValidationContext =
         CaptionValidationContext(
-            requiredCharacterCount = profile.controls.characterCount,
+            destinationLimit = profile.destination.characterLimit,
             prohibitedPhrases = profile.prohibitedPhrases,
-            allowsBodyEmoji = profile.usesEmoji
+            emojiIntensity = profile.emojiIntensity
         )
 
     fun validate(text: String, profile: CreatorProfile): CaptionValidationReport =
@@ -76,10 +82,8 @@ object ExternalPromptBuilder {
 
 /**
  * iOS PreviewCaptionGenerator 포팅 — 오프라인 결정적 생성기.
- * 저장된 작성 지침의 필수 형식(정확한 글자 수, 첫 줄 한글 태그 2개,
- * 마침표 뒤 줄바꿈, 전체 따옴표 금지, 절제된 문단 앞 이모지,
- * 이모지로 감싼 요약 마지막 줄)을 결정적으로 재현한다.
- * 시드/난수는 Swift UInt64 오버플로 연산(&*, &+, >>)을 ULong으로 그대로 따른다.
+ * 선택한 게시 기준 글자 수 상한을 넘지 않는 선에서, 분위기·이모지 강도·원문 반영 정도에
+ * 맞춰 문장을 결정적으로 조립한다.
  */
 class DeterministicCaptionGenerator(
     private val simulatedDelayMillis: Long = 550L
@@ -94,85 +98,70 @@ class DeterministicCaptionGenerator(
         if (simulatedDelayMillis > 0) delay(simulatedDelayMillis)
 
         val cleanIdea = sanitize(idea)
-        val controls = profile.controls
-        val seed = SeedBox(seed(cleanIdea + mood.rawValue + length.rawValue + controls.swiftDescription()))
+        val seed = SeedBox(seed(cleanIdea + mood.rawValue + length.rawValue + profile.emojiIntensity.name))
+        val limit = maxOf(20, minOf(profile.controls.characterCount, profile.destination.characterLimit))
+        val symbol = paragraphEmoji(mood)
 
-        val tags = hashtagPair(cleanIdea, mood, seed)
-        val firstLine = "#${tags.first} #${tags.second}"
-        val lastLine = summaryLine(mood, controls.characterCount)
-
-        if (controls.characterCount < 100) {
-            val bodyLength = maxOf(
-                1,
-                controls.characterCount - gc(firstLine) - gc(lastLine) - 2
-            )
-            val body = compactBody(bodyLength, cleanIdea, mood, length, profile.usesEmoji)
-            val composedText = listOf(firstLine, body, lastLine).joinToString("\n")
-            return GeneratedPost.create(
-                sourceIdea = cleanIdea,
-                hook = body,
-                caption = "",
-                callToAction = lastLine,
-                hashtags = listOf(tags.first, tags.second),
-                composedText = composedText,
-                targetCharacterCount = controls.characterCount
-            )
+        val (leadEmoji, bodyEmoji, summaryEmoji) = when (profile.emojiIntensity) {
+            EmojiIntensity.NONE -> Triple<String?, String, String>(null, "", "")
+            EmojiIntensity.LOW -> Triple<String?, String, String>(null, "", symbol)
+            EmojiIntensity.HIGH -> Triple<String?, String, String>(symbol, "", symbol)
+            EmojiIntensity.HEAVY -> Triple<String?, String, String>(symbol, symbol, symbol)
         }
 
-        val maximumLeadLength = maxOf(
-            4,
-            controls.characterCount - gc(firstLine) - gc(lastLine) - 4
-        )
-        val leadLine = leadLine(
-            idea = cleanIdea,
-            mood = mood,
-            cap = minOf(leadCap(length), maximumLeadLength),
-            emoji = if (profile.usesEmoji) paragraphEmoji(mood) else null
-        )
+        val leadRatio = when (length) {
+            PostLength.SHORT -> 0.35
+            PostLength.MEDIUM -> 0.6
+            PostLength.LONG -> 0.85
+        }
+        val leadCap = minOf(maxOf(8, (limit * leadRatio).toInt()), limit - 1)
+        val leadLine = leadLine(idea = cleanIdea, mood = mood, cap = leadCap, emoji = leadEmoji)
 
-        // 전체 글자 수 = 각 줄 글자 수 합 + 줄바꿈 수(줄 수 - 1).
-        // 고정 줄을 뺀 나머지 예산을 본문 문장으로 채우고,
-        // 마지막 남은 글자 수는 가변 길이 문장으로 정확히 메운다.
-        var remaining = controls.characterCount -
-            gc(firstLine) -
-            (1 + gc(leadLine)) -
-            (1 + gc(lastLine))
+        val lines = mutableListOf(leadLine)
+        var used = Graphemes.count(leadLine)
 
-        val bodyLines = mutableListOf(leadLine)
         val banned = bannedPhrases(profile.prohibitedPhrases)
-        val bank = toneSentenceBank(controls) +
-            rotated(sentenceBank(mood), seed).filter { sentence -> banned.none { sentence.contains(it) } }
+        val bank = rotated(sentenceBank(mood), seed)
+            .filter { sentence -> banned.none { sentence.contains(it) } }
 
         for (sentence in bank) {
-            val cost = 1 + gc(sentence)
-            // 가변 문장 최소 비용(줄바꿈 1 + 글자 3)을 항상 남겨 둔다.
-            if (remaining - cost >= 4) {
-                bodyLines.add(sentence)
-                remaining -= cost
+            val candidate = if (bodyEmoji.isEmpty()) sentence else "$bodyEmoji $sentence"
+            val cost = 1 + Graphemes.count(candidate)
+            if (used + cost <= limit) {
+                lines.add(candidate)
+                used += cost
             }
         }
-        bodyLines.add(flexSentence(remaining - 1, seed))
 
-        val composedText = (listOf(firstLine) + bodyLines + listOf(lastLine)).joinToString("\n")
+        if (summaryEmoji.isNotEmpty()) {
+            val summary = "$summaryEmoji ${summaryClause(mood)} $summaryEmoji"
+            if (used + 1 + Graphemes.count(summary) <= limit) {
+                lines.add(summary)
+                used += 1 + Graphemes.count(summary)
+            }
+        }
+
+        var composedText = lines.joinToString("\n")
+        if (Graphemes.count(composedText) > limit) {
+            composedText = Graphemes.prefix(composedText, limit)
+        }
 
         return GeneratedPost.create(
             sourceIdea = cleanIdea,
             hook = leadLine,
-            caption = bodyLines.drop(1).joinToString("\n"),
-            callToAction = lastLine,
-            hashtags = listOf(tags.first, tags.second),
+            caption = lines.drop(1).joinToString("\n"),
+            callToAction = lines.lastOrNull() ?: "",
+            hashtags = emptyList(),
             composedText = composedText,
-            targetCharacterCount = controls.characterCount
+            targetCharacterCount = profile.controls.characterCount,
+            destinationCharacterLimit = profile.destination.characterLimit
         )
     }
 
     companion object {
 
-        private fun gc(text: String): Int = Graphemes.count(text)
-
         // MARK: - 입력 정리
 
-        /** 형식 규칙과 충돌하는 문자(따옴표, 해시, 이모지, 문장 중간 마침표)를 제거한다. */
         internal fun sanitize(raw: String): String {
             val mapped = Graphemes.clusters(raw).joinToString("") { cluster ->
                 when {
@@ -191,21 +180,14 @@ class DeterministicCaptionGenerator(
 
         // MARK: - 줄 구성
 
-        private fun leadCap(length: PostLength): Int = when (length) {
-            PostLength.SHORT -> 45
-            PostLength.MEDIUM -> 65
-            PostLength.LONG -> 90
-        }
-
         private fun leadLine(idea: String, mood: PostMood, cap: Int, emoji: String?): String {
-            val prefix = emoji ?: ""
+            val prefix = emoji?.let { "$it " } ?: ""
             val clause = idea.ifEmpty { defaultLead(mood) }
-            val bodyCap = cap - gc(prefix) - 1
+            val bodyCap = maxOf(1, cap - Graphemes.count(prefix) - 1)
 
-            if (gc(clause) <= bodyCap) {
+            if (Graphemes.count(clause) <= bodyCap) {
                 return "$prefix$clause."
             }
-            // 해시태그·이모지·요약을 건드리지 않도록 아이디어 문장만 단어 경계에서 줄인다.
             var cut = Graphemes.prefix(clause, bodyCap)
             val cutClusters = Graphemes.clusters(cut)
             val lastSpace = cutClusters.lastIndexOf(" ")
@@ -215,50 +197,10 @@ class DeterministicCaptionGenerator(
             return prefix + cut.trim(' ', '\t') + "…"
         }
 
-        private fun summaryLine(mood: PostMood, targetCount: Int): String {
-            if (targetCount < 100) {
-                return when (mood) {
-                    PostMood.WARM -> "🧡 오늘을 남긴다 🧡"
-                    PostMood.WITTY -> "😎 오늘도 해냈다 😎"
-                    PostMood.CALM -> "🌙 오늘을 담는다 🌙"
-                }
-            }
-            val (emoji, clause) = when (mood) {
-                PostMood.WARM -> "🧡" to "온기를 담아 오늘을 남긴다"
-                PostMood.WITTY -> "😎" to "얼렁뚱땅 그래도 완벽한 하루"
-                PostMood.CALM -> "🌙" to "고요하게 채운 하루의 기록"
-            }
-            return "$emoji $clause $emoji"
-        }
-
-        private fun compactBody(
-            target: Int,
-            idea: String,
-            mood: PostMood,
-            length: PostLength,
-            emoji: Boolean
-        ): String {
-            if (target <= 0) return ""
-            val prefix = if (emoji) paragraphEmoji(mood) else ""
-            val ratio = when (length) {
-                PostLength.SHORT -> 0.35
-                PostLength.MEDIUM -> 0.6
-                PostLength.LONG -> 0.85
-            }
-            val available = maxOf(0, target - gc(prefix) - 1)
-            val sourceCount = minOf(gc(idea), maxOf(1, (available * ratio).toInt()))
-            var body = prefix + Graphemes.prefix(idea, sourceCount).trim(' ', '\t')
-
-            if (gc(body) >= target) {
-                return Graphemes.prefix(body, maxOf(0, target - 1)) + "."
-            }
-
-            val seedBox = SeedBox(seed(idea + mood.rawValue + length.rawValue))
-            val remaining = target - gc(body)
-            if (remaining == 1) return "$body…"
-            body += " " + flexSentence(remaining - 1, seedBox)
-            if (gc(body) < target) body += "음".repeat(target - gc(body))
-            return Graphemes.prefix(body, target)
+        private fun summaryClause(mood: PostMood): String = when (mood) {
+            PostMood.WARM -> "온기를 담아 오늘을 남긴다"
+            PostMood.WITTY -> "얼렁뚱땅 그래도 완벽한 하루"
+            PostMood.CALM -> "고요하게 채운 하루의 기록"
         }
 
         private fun paragraphEmoji(mood: PostMood): String = when (mood) {
@@ -306,54 +248,8 @@ class DeterministicCaptionGenerator(
             )
         }
 
-        private fun toneSentenceBank(controls: GenerationControls): List<String> {
-            val groups: List<Pair<Int, List<String>>> = listOf(
-                controls.emotion to listOf("마음의 잔향이 오래 머문다.", "무심한 장면이 가슴을 건드린다."),
-                controls.kindness to listOf("다정한 시선 하나를 조용히 건넨다.", "서두르지 않아도 괜찮다고 말해 본다."),
-                controls.originality to listOf("익숙한 풍경의 이면이 낯설게 반짝인다.", "평범함의 모서리에서 새 장면을 줍는다."),
-                controls.masculinity to listOf("결심한 방향으로 묵묵히 걸어간다.", "말보다 단단한 걸음으로 답한다."),
-                controls.chic to listOf("설명은 줄이고 여운만 남긴다.", "담백하게 선을 긋고 다음으로 간다.")
-            )
-            return groups.sortedByDescending { it.first }.flatMap { it.second }
-        }
+        // MARK: - 결정적 난수 (Swift UInt64 오버플로 재현)
 
-        // MARK: - 해시태그
-
-        private fun hashtagPair(
-            idea: String,
-            mood: PostMood,
-            seed: SeedBox
-        ): Pair<String, String> {
-            val candidates = mutableListOf<String>()
-            for (word in idea.split(" ").filter { it.isNotEmpty() }) {
-                val hangul = Graphemes.clusters(word)
-                    .filter { Graphemes.isHangulCluster(it) }
-                    .take(6)
-                    .joinToString("")
-                if (gc(hangul) >= 2 && hangul !in candidates) {
-                    candidates.add(hangul)
-                }
-            }
-
-            val fallback = when (mood) {
-                PostMood.WARM -> listOf("온기기록", "마음한켠", "따뜻한하루")
-                PostMood.WITTY -> listOf("일상반전", "오늘의수확", "얼렁뚱땅")
-                PostMood.CALM -> listOf("담백일기", "고요한하루", "느린기록")
-            }
-            val pool = rotated(fallback, seed).toMutableList()
-            while (candidates.size < 2) {
-                val next = pool.removeAt(0)
-                if (next !in candidates) candidates.add(next)
-            }
-            return candidates[0] to candidates[1]
-        }
-
-        // MARK: - 글자 수 맞춤 채움
-
-        /**
-         * 마침표를 포함해 정확히 target 글자인 혼잣말 문장을 합성한다.
-         * 부사(길이 2~4, 공백 포함 비용 3~5)를 쌓다가 길이 2~6의 마무리 어절로 닫는다.
-         */
         internal fun flexSentence(target: Int, seed: SeedBox): String {
             when {
                 target < 1 -> return ""
@@ -380,11 +276,8 @@ class DeterministicCaptionGenerator(
             return words.joinToString(" ") + "."
         }
 
-        // MARK: - 결정적 난수 (Swift UInt64 오버플로 재현)
-
         internal class SeedBox(var value: ULong)
 
-        /** 같은 아이디어·설정이면 항상 같은 결과가 나오도록 FNV-1a 기반 시드를 쓴다. */
         internal fun seed(text: String): ULong {
             var hash: ULong = 0xcbf29ce484222325uL
             text.codePoints().forEach { cp ->

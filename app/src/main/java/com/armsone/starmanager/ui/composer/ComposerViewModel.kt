@@ -23,6 +23,7 @@ import com.armsone.starmanager.service.DeterministicCaptionGenerator
 import com.armsone.starmanager.service.DirectAIProvider
 import com.armsone.starmanager.service.ExternalPromptBuilder
 import com.armsone.starmanager.ui.externalai.ExternalAIAnswerCleaner
+import com.armsone.starmanager.ui.externalai.ExternalAIAttachment
 import com.armsone.starmanager.ui.externalai.ExternalAIAutomationPhase
 import com.armsone.starmanager.ui.externalai.ExternalAIErrorSanitizer
 import com.armsone.starmanager.ui.externalai.ExternalAIFallbackReason
@@ -57,6 +58,7 @@ data class ComposerUiState(
     val captionCandidates: Map<CaptionSource, CaptionCandidate> = emptyMap(),
     val pendingExternalProvider: DirectAIProvider? = null,
     val activeAutomationProvider: DirectAIProvider? = null,
+    val activeAttachment: ExternalAIAttachment? = null,
     val automationPhase: ExternalAIAutomationPhase = ExternalAIAutomationPhase.IDLE,
     val automationElapsedSeconds: Long = 0L,
     val automationStepTitle: String? = null,
@@ -91,6 +93,18 @@ class ComposerViewModel : ViewModel() {
 
     val trimmedIdea: String get() = _state.value.idea.trim()
 
+    val hasRepresentativePhoto: Boolean
+        get() = _state.value.mediaItems.any { it.kind == MediaKind.IMAGE }
+
+    fun makeRepresentativePhotoAttachment(): ExternalAIAttachment? {
+        val firstImage = _state.value.mediaItems.firstOrNull { it.kind == MediaKind.IMAGE } ?: return null
+        return ExternalAIAttachment(
+            data = firstImage.data,
+            mimeType = "image/jpeg",
+            filename = "representative_photo.jpg"
+        )
+    }
+
     fun hasContent(): Boolean = _state.value.run {
         idea.isNotEmpty() || generatedPost != null || mediaItems.isNotEmpty() || captionCandidates.isNotEmpty() || pendingExternalProvider != null || isGenerating
     }
@@ -117,6 +131,7 @@ class ComposerViewModel : ViewModel() {
                 captionCandidates = emptyMap(),
                 pendingExternalProvider = null,
                 activeAutomationProvider = null,
+                activeAttachment = null,
                 automationPhase = ExternalAIAutomationPhase.IDLE,
                 automationElapsedSeconds = 0L,
                 automationStepTitle = null,
@@ -136,6 +151,7 @@ class ComposerViewModel : ViewModel() {
             state.copy(
                 isGenerating = false,
                 activeAutomationProvider = null,
+                activeAttachment = null,
                 automationPhase = ExternalAIAutomationPhase.IDLE,
                 automationElapsedSeconds = 0L,
                 automationStepTitle = null,
@@ -189,9 +205,9 @@ class ComposerViewModel : ViewModel() {
 
     fun validationContext(signature: DraftSignature): CaptionValidationContext =
         CaptionValidationContext(
-            requiredCharacterCount = signature.profile.controls.characterCount,
+            destinationLimit = signature.profile.destination.characterLimit,
             prohibitedPhrases = signature.profile.prohibitedPhrases,
-            allowsBodyEmoji = signature.profile.usesEmoji
+            emojiIntensity = signature.profile.emojiIntensity
         )
 
     fun validationReport(candidate: CaptionCandidate): CaptionValidationReport =
@@ -201,9 +217,16 @@ class ComposerViewModel : ViewModel() {
         )
 
     fun activeValidationReport(): CaptionValidationReport? {
-        val post = _state.value.generatedPost ?: return null
-        val signature = _state.value.generatedSignature ?: return null
-        return CaptionValidationReport.evaluate(post.composedText, validationContext(signature))
+        val textToValidate = _state.value.idea.ifBlank { _state.value.generatedPost?.composedText } ?: return null
+        val profile = profileStore.profile.value
+        return CaptionValidationReport.evaluate(
+            textToValidate,
+            CaptionValidationContext(
+                destinationLimit = profile.destination.characterLimit,
+                prohibitedPhrases = profile.prohibitedPhrases,
+                emojiIntensity = profile.emojiIntensity
+            )
+        )
     }
 
     // MARK: - 생성
@@ -216,6 +239,7 @@ class ComposerViewModel : ViewModel() {
             it.copy(
                 isGenerating = true,
                 activeAutomationProvider = null,
+                activeAttachment = null,
                 automationPhase = ExternalAIAutomationPhase.CONNECTING,
                 automationElapsedSeconds = 0L,
                 automationStepTitle = "기기 AI로 만드는 중…",
@@ -226,8 +250,6 @@ class ComposerViewModel : ViewModel() {
                 statusMessage = null,
                 shareMessage = null,
                 shareMessageIsError = false,
-                generatedPost = null,
-                generatedSignature = null,
                 activeCaptionSource = null
             )
         }
@@ -235,8 +257,6 @@ class ComposerViewModel : ViewModel() {
             try {
                 val profile = profileStore.profile.value
                 val signature = currentDraftSignature()
-                // Android에는 기기 AI가 없으므로 iOS 미지원 기기와 동일하게
-                // 결정적 생성기로 폴백한다.
                 val generator = DeterministicCaptionGenerator(
                     simulatedDelayMillis = FixtureHooks.captionDelayMillis ?: 550L
                 )
@@ -248,6 +268,7 @@ class ComposerViewModel : ViewModel() {
                 )
                 update {
                     it.copy(
+                        idea = post.composedText,
                         captionCandidates = it.captionCandidates + (candidate.source to candidate),
                         generatedPost = post,
                         generatedSignature = signature,
@@ -277,26 +298,27 @@ class ComposerViewModel : ViewModel() {
     fun startExternalGeneration(provider: DirectAIProvider) = startExternalAIGeneration(provider)
 
     fun startExternalAIGeneration(provider: DirectAIProvider) {
-        if (trimmedIdea.isEmpty() || _state.value.isGenerating) return
+        val hasPhoto = hasRepresentativePhoto
+        if ((trimmedIdea.isEmpty() && !hasPhoto) || _state.value.isGenerating) return
         timerJob?.cancel()
         generationJob?.cancel()
+        val attachment = makeRepresentativePhotoAttachment()
         update { state ->
             state.copy(
                 isGenerating = true,
                 activeAutomationProvider = provider,
                 pendingExternalProvider = provider,
+                activeAttachment = attachment,
                 automationPhase = ExternalAIAutomationPhase.CONNECTING,
                 automationElapsedSeconds = 0L,
                 automationStepTitle = "${provider.title}에 연결하는 중…",
-                automationStepSubtitle = "입력창을 준비하고 있어요",
+                automationStepSubtitle = if (attachment != null) "사진과 입력창을 준비하고 있어요" else "입력창을 준비하고 있어요",
                 fallbackReason = null,
                 isFallbackBrowserVisible = false,
                 errorMessage = null,
                 statusMessage = "${provider.title}에 연결하는 중…",
                 shareMessage = null,
                 shareMessageIsError = false,
-                generatedPost = null,
-                generatedSignature = null,
                 activeCaptionSource = null,
                 automationRequestId = state.automationRequestId + 1
             )
@@ -324,6 +346,7 @@ class ComposerViewModel : ViewModel() {
                         s.copy(
                             isGenerating = false,
                             activeAutomationProvider = null,
+                            activeAttachment = null,
                             automationPhase = ExternalAIAutomationPhase.ERROR,
                             automationElapsedSeconds = elapsed,
                             automationStepTitle = null,
@@ -379,6 +402,7 @@ class ComposerViewModel : ViewModel() {
             it.copy(
                 isGenerating = false,
                 activeAutomationProvider = null,
+                activeAttachment = null,
                 automationPhase = ExternalAIAutomationPhase.ERROR,
                 errorMessage = sanitized,
                 fallbackReason = null,
@@ -389,18 +413,22 @@ class ComposerViewModel : ViewModel() {
 
     fun externalPrompt(): String {
         val profile = profileStore.profile.value
-        return ExternalPromptBuilder.build(
-            profile,
-            trimmedIdea,
-            profile.mood,
-            profile.preferredLength
-        )
+        val hasPhoto = hasRepresentativePhoto
+        return when {
+            hasPhoto && trimmedIdea.isNotEmpty() ->
+                profile.photoAndTextPrompt(trimmedIdea, profile.mood, profile.preferredLength)
+            hasPhoto && trimmedIdea.isEmpty() ->
+                profile.photoOnlyPrompt(profile.mood, profile.preferredLength)
+            else ->
+                profile.generationPrompt(trimmedIdea, profile.mood, profile.preferredLength)
+        }
     }
 
     /** 요청문을 클립보드에 복사하고 공유 인텐트를 돌려준다. */
     fun sharePrompt(provider: DirectAIProvider, context: Context): Intent? {
-        if (trimmedIdea.isEmpty()) {
-            update { it.copy(errorMessage = "이야기를 입력해 주세요.") }
+        val hasPhoto = hasRepresentativePhoto
+        if (trimmedIdea.isEmpty() && !hasPhoto) {
+            update { it.copy(errorMessage = "이야기나 사진을 입력해 주세요.") }
             return null
         }
         val prompt = externalPrompt()
@@ -426,6 +454,7 @@ class ComposerViewModel : ViewModel() {
                 it.copy(
                     isGenerating = false,
                     activeAutomationProvider = null,
+                    activeAttachment = null,
                     automationPhase = ExternalAIAutomationPhase.ERROR,
                     errorMessage = "복사한 결과가 비어 있어요."
                 )
@@ -449,7 +478,8 @@ class ComposerViewModel : ViewModel() {
             callToAction = lines.lastOrNull() ?: "",
             hashtags = hashtags,
             composedText = cleanedText,
-            targetCharacterCount = signature.profile.controls.characterCount
+            targetCharacterCount = signature.profile.controls.characterCount,
+            destinationCharacterLimit = signature.profile.destination.characterLimit
         )
         val candidate = CaptionCandidate(
             source = provider.captionSource,
@@ -458,9 +488,14 @@ class ComposerViewModel : ViewModel() {
         )
         update {
             it.copy(
+                idea = cleanedText,
                 captionCandidates = it.captionCandidates + (candidate.source to candidate),
+                generatedPost = post,
+                generatedSignature = signature,
+                activeCaptionSource = candidate.source,
                 isGenerating = false,
                 activeAutomationProvider = null,
+                activeAttachment = null,
                 automationPhase = ExternalAIAutomationPhase.COMPLETED,
                 fallbackReason = null,
                 isFallbackBrowserVisible = false,
@@ -474,12 +509,12 @@ class ComposerViewModel : ViewModel() {
                 lastImportSuccessToken = System.currentTimeMillis()
             )
         }
-        useCandidate(candidate)
     }
 
     fun useCandidate(candidate: CaptionCandidate) {
         update { state ->
             state.copy(
+                idea = candidate.post.composedText,
                 mediaItems = state.mediaItems.filter { media ->
                     media.generatedFromPostId == null || media.generatedFromPostId == candidate.post.id
                 },
@@ -596,9 +631,10 @@ class ComposerViewModel : ViewModel() {
     // MARK: - 공유
 
     /** 문구를 복사하고 미디어 공유 인텐트를 준비한다. 반환값 null이면 안내 메시지만 갱신됨. */
-    suspend fun prepareShare(post: GeneratedPost, context: Context): Intent? {
+    suspend fun prepareShare(context: Context): Intent? {
         val version = resetVersion
         val snapshot = _state.value.mediaItems
+        val textToShare = _state.value.idea.ifBlank { _state.value.generatedPost?.composedText ?: "" }
         if (_state.value.isPreparingShare || _state.value.isGenerating) {
             return null
         }
@@ -617,16 +653,7 @@ class ComposerViewModel : ViewModel() {
             }
             return null
         }
-        if (!draftIsCurrent()) {
-            update {
-                it.copy(
-                    shareMessage = "작성 조건이 바뀌었어요. 게시물을 다시 만든 뒤 공유해 주세요.",
-                    shareMessageIsError = true
-                )
-            }
-            return null
-        }
-        copyToClipboard(context, post.composedText)
+        copyToClipboard(context, textToShare)
         update {
             it.copy(
                 isPreparingShare = true,
@@ -665,7 +692,6 @@ class ComposerViewModel : ViewModel() {
 
     private fun prepareShareFiles(mediaItems: List<ComposerMedia>, context: Context): List<Uri> {
         val shareRoot = File(context.cacheDir, "share")
-        // 이전 공유 파일 정리
         shareRoot.listFiles()?.forEach { it.deleteRecursively() }
         val directory = File(shareRoot, "starmanager-share-${UUID.randomUUID()}")
         directory.mkdirs()

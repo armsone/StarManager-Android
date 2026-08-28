@@ -416,12 +416,14 @@ class ExternalAIParityTest {
 
     @Test
     fun `스타일 요약 문구 형식이 규격과 정확히 일치한다`() {
+        val destination = com.armsone.starmanager.model.PostDestination.INSTAGRAM
         val mood = com.armsone.starmanager.model.PostMood.WITTY
-        val length = com.armsone.starmanager.model.PostLength.MEDIUM
+        val style = com.armsone.starmanager.model.PostStyle.MEMO
+        val tone = com.armsone.starmanager.model.PostTone.KIND
         val characterCount = 200
 
-        val formatted = "${mood.rawValue} · 이야기 비중 ${length.storyWeightTitle} · ${characterCount}자 — 나의 취향 탭에서 조절"
-        assertEquals("재치 있게 · 이야기 비중 보통 · 200자 — 나의 취향 탭에서 조절", formatted)
+        val formatted = "${destination.title} · ${mood.rawValue} · ${style.title} · ${tone.title} · 목표 ${characterCount}자"
+        assertEquals("Instagram · 재치 있게 · 메모 · 친절하게 · 목표 200자", formatted)
     }
 
     // MARK: - AIBI 로그인 관리 및 인증 상태 프로브 계약 테스트

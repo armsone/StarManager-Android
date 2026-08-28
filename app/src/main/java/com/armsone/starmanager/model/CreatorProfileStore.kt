@@ -3,6 +3,9 @@ package com.armsone.starmanager.model
 import android.content.Context
 import android.content.SharedPreferences
 import com.google.gson.Gson
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -54,8 +57,8 @@ enum class AppAppearance(val title: String) {
 
 /**
  * iOS CreatorProfileStore 포팅.
- * 프로필과 프리셋은 변경 즉시 저장되고, 최초 실행(또는 버전 미달) 시
- * 386 스타일을 기본 적용하되 글자 수 200자는 유지한다.
+ * 프로필과 프리셋은 변경 즉시 저장되고, 레거시 JSON(usesEmoji 불리언, 레거시 기본 문구)을
+ * 관대하게 새 Typed Enum 구조로 마이그레이션한다.
  */
 class CreatorProfileStore(private val storage: KeyValueStore) {
 
@@ -88,22 +91,15 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
         }
         _presets = MutableStateFlow(storedPresets ?: WritingPreset.defaults)
 
-        val storedProfile = storage.getString(STORAGE_KEY)?.let { json ->
-            runCatching { gson.fromJson(json, CreatorProfile::class.java) }.getOrNull()
-        } ?: CreatorProfile()
+        val rawProfileJson = storage.getString(STORAGE_KEY)
+        val decodedProfile = rawProfileJson?.let { parseAndMigrateProfile(it) } ?: CreatorProfile()
+        val clampedProfile = decodedProfile.clampCharacterCountToDestinationLimit()
 
-        if (storage.getInt(DEFAULT_STYLE_VERSION_KEY, 0) < CURRENT_DEFAULT_STYLE_VERSION) {
-            val migrated = GenerationStylePreset.GENERATION_386.applyingTo(storedProfile)
-            _profile = MutableStateFlow(migrated)
-            storage.putInt(DEFAULT_STYLE_VERSION_KEY, CURRENT_DEFAULT_STYLE_VERSION)
-            storage.putString(STORAGE_KEY, gson.toJson(migrated))
-        } else {
-            _profile = MutableStateFlow(storedProfile)
-        }
+        _profile = MutableStateFlow(clampedProfile)
     }
 
     fun updateProfile(transform: (CreatorProfile) -> CreatorProfile) {
-        val updated = transform(_profile.value)
+        val updated = transform(_profile.value).clampCharacterCountToDestinationLimit()
         _profile.value = updated
         save()
     }
@@ -111,7 +107,7 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
     fun setProfile(profile: CreatorProfile) = updateProfile { profile }
 
     fun restoreDefaultWritingGuidelines() = updateProfile {
-        it.copy(writingGuidelines = CreatorProfile.DEFAULT_WRITING_GUIDELINES)
+        it.copy(writingGuidelines = "")
     }
 
     fun applyGenerationStyle(preset: GenerationStylePreset) {
@@ -151,7 +147,7 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
         preset.voice?.let { updated = updated.copy(voice = it) }
         preset.audience?.let { updated = updated.copy(audience = it) }
         preset.preferredLength?.let { updated = updated.copy(preferredLength = it) }
-        preset.usesEmoji?.let { updated = updated.copy(usesEmoji = it) }
+        preset.usesEmoji?.let { updated = updated.copy(emojiIntensity = if (it) EmojiIntensity.LOW else EmojiIntensity.NONE) }
         preset.prohibitedPhrases?.let { updated = updated.copy(prohibitedPhrases = it) }
         preset.hashtagStyle?.let { updated = updated.copy(hashtagStyle = it) }
         preset.mood?.let { updated = updated.copy(mood = it) }
@@ -191,12 +187,124 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
         storage.putString(PRESETS_STORAGE_KEY, gson.toJson(_presets.value))
     }
 
+    private fun parseAndMigrateProfile(json: String): CreatorProfile {
+        return try {
+            val element = JsonParser.parseString(json)
+            if (!element.isJsonObject) return CreatorProfile()
+            val obj = element.asJsonObject
+
+            val accountTopicRaw = obj.get("accountTopic")?.asStringOrNull() ?: ""
+            val audienceRaw = obj.get("audience")?.asStringOrNull() ?: ""
+            val hashtagStyleRaw = obj.get("hashtagStyle")?.asStringOrNull() ?: ""
+            val additionalInstructionsRaw = obj.get("additionalInstructions")?.asStringOrNull()
+            val prohibitedPhrasesRaw = obj.get("prohibitedPhrases")?.asStringOrNull() ?: ""
+            val detailedGuidelinesRaw = obj.get("detailedGuidelines")?.asStringOrNull() ?: ""
+            val voiceRaw = obj.get("voice")?.asStringOrNull() ?: ""
+
+            val accountTopic = if (accountTopicRaw == LEGACY_ACCOUNT_TOPIC) "" else accountTopicRaw
+            val audience = if (audienceRaw == LEGACY_AUDIENCE) "" else audienceRaw
+            val hashtagStyle = if (hashtagStyleRaw == LEGACY_HASHTAG_STYLE) "" else hashtagStyleRaw
+            val additionalInstructions = if (additionalInstructionsRaw != null && LEGACY_ADDITIONAL_INSTRUCTIONS.contains(additionalInstructionsRaw)) {
+                null
+            } else {
+                additionalInstructionsRaw
+            }
+            val voice = if (voiceRaw == LEGACY_VOICE) "" else voiceRaw
+
+            // 이모지 강도 마이그레이션: emojiIntensity가 없으면 usesEmoji(Boolean) 확인
+            val emojiIntensity = if (obj.has("emojiIntensity")) {
+                runCatching { EmojiIntensity.valueOf(obj.get("emojiIntensity").asString) }.getOrDefault(EmojiIntensity.LOW)
+            } else if (obj.has("usesEmoji")) {
+                val uses = obj.get("usesEmoji").asBoolean
+                if (uses) EmojiIntensity.LOW else EmojiIntensity.NONE
+            } else {
+                EmojiIntensity.LOW
+            }
+
+            val destination = obj.get("destination")?.asStringOrNull()?.let {
+                runCatching { PostDestination.valueOf(it) }.getOrNull()
+            } ?: PostDestination.INSTAGRAM
+
+            val ageGroup = obj.get("ageGroup")?.asStringOrNull()?.let {
+                runCatching { AudienceAgeGroup.valueOf(it) }.getOrNull()
+            } ?: AudienceAgeGroup.XZ
+
+            val style = obj.get("style")?.asStringOrNull()?.let {
+                runCatching { PostStyle.valueOf(it) }.getOrNull()
+            } ?: PostStyle.MEMO
+
+            val tone = obj.get("tone")?.asStringOrNull()?.let {
+                runCatching { PostTone.valueOf(it) }.getOrNull()
+            } ?: PostTone.KIND
+
+            val lineBreakFrequency = obj.get("lineBreakFrequency")?.asStringOrNull()?.let {
+                runCatching { LineBreakFrequency.valueOf(it) }.getOrNull()
+            } ?: LineBreakFrequency.MODERATE
+
+            val preferredLength = obj.get("preferredLength")?.asStringOrNull()?.let {
+                runCatching { PostLength.valueOf(it) }.getOrNull()
+            } ?: PostLength.MEDIUM
+
+            val mood = obj.get("mood")?.asStringOrNull()?.let {
+                runCatching { PostMood.valueOf(it) }.getOrNull()
+            } ?: PostMood.WITTY
+
+            val generationControls = if (obj.has("generationControls") && obj.get("generationControls").isJsonObject) {
+                runCatching { gson.fromJson(obj.get("generationControls"), GenerationControls::class.java) }.getOrNull()
+            } else {
+                null
+            }
+
+            val selectedGenerationStyle = obj.get("selectedGenerationStyle")?.asStringOrNull()?.let {
+                runCatching { GenerationStylePreset.valueOf(it) }.getOrNull()
+            }
+
+            CreatorProfile(
+                accountTopic = accountTopic,
+                voice = voice,
+                audience = audience,
+                preferredLength = preferredLength,
+                emojiIntensity = emojiIntensity,
+                prohibitedPhrases = prohibitedPhrasesRaw,
+                hashtagStyle = hashtagStyle,
+                detailedGuidelines = detailedGuidelinesRaw,
+                destination = destination,
+                ageGroup = ageGroup,
+                style = style,
+                tone = tone,
+                lineBreakFrequency = lineBreakFrequency,
+                generationControls = generationControls,
+                additionalInstructions = additionalInstructions,
+                mood = mood,
+                selectedGenerationStyle = selectedGenerationStyle
+            )
+        } catch (_: Exception) {
+            CreatorProfile()
+        }
+    }
+
+    private fun JsonElement.asStringOrNull(): String? =
+        if (isJsonPrimitive && asJsonPrimitive.isString) asString else null
+
     companion object {
         const val STORAGE_KEY = "creatorProfile"
         const val PRESETS_STORAGE_KEY = "writingPresets"
         const val DEFAULT_STYLE_VERSION_KEY = "defaultGenerationStyleVersion"
-        const val CURRENT_DEFAULT_STYLE_VERSION = 1
+        const val CURRENT_DEFAULT_STYLE_VERSION = 2
         const val APPEARANCE_STORAGE_KEY = "appAppearance"
         const val SHOW_EXTERNAL_AI_BROWSER_STORAGE_KEY = "showsExternalAIBrowser"
+
+        private const val LEGACY_ACCOUNT_TOPIC = "나의 일상과 경험"
+        private const val LEGACY_AUDIENCE = "내 이야기에 공감하는 사람들"
+        private const val LEGACY_HASHTAG_STYLE = "핵심 키워드 중심"
+        private const val LEGACY_VOICE = "다정하고 솔직하게"
+        private val LEGACY_ADDITIONAL_INSTRUCTIONS: Set<String> = setOf(
+            "억지 유행어는 피하고 설명보다 장면, 장면보다 한 방 있는 말맛을 먼저 보여주기",
+            "과한 신파 없이 장면은 선명하게, 결론은 무심한 듯 멋있게 남기기",
+            "성공담보다 시행착오를 앞세우고, 잔소리가 될 순간에는 자조적인 유머로 방향 틀기",
+            "한 번쯤 훈계할 듯 운을 떼되 결론에서는 자기 흑역사를 꺼내 웃음과 쓸 만한 지혜를 함께 남기기",
+            "군더더기 없이 낯선 비유와 짧은 호흡을 사용",
+            "잔잔한 여운과 따뜻한 장면 묘사를 강조"
+        )
     }
 }

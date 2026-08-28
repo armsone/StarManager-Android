@@ -2,6 +2,7 @@ package com.armsone.starmanager
 
 import com.armsone.starmanager.model.CaptionValidationReport
 import com.armsone.starmanager.model.CreatorProfile
+import com.armsone.starmanager.model.EmojiIntensity
 import com.armsone.starmanager.model.GenerationControls
 import com.armsone.starmanager.model.PostLength
 import com.armsone.starmanager.model.PostMood
@@ -18,29 +19,26 @@ class DeterministicCaptionGeneratorTest {
     private val generator = DeterministicCaptionGenerator(simulatedDelayMillis = 0)
     private val idea = "오늘 아침 한강에서 달리기를 하고 커피를 마셨다"
 
-    private fun profileWith(count: Int, usesEmoji: Boolean = true) = CreatorProfile(
-        usesEmoji = usesEmoji,
+    private fun profileWith(count: Int, emojiIntensity: EmojiIntensity = EmojiIntensity.LOW) = CreatorProfile(
+        emojiIntensity = emojiIntensity,
         generationControls = GenerationControls(characterCount = count)
     )
 
     @Test
-    fun `기본 200자 목표를 문자소 단위로 정확히 지킨다`() = runTest {
+    fun `기본 200자 목표를 넘지 않고 실제 문자소를 기록한다`() = runTest {
         val post = generator.generate(idea, PostMood.WITTY, PostLength.MEDIUM, profileWith(200))
-        assertEquals(200, Graphemes.count(post.composedText))
-        assertEquals(200, post.characterCount)
+        assertTrue(Graphemes.count(post.composedText) in 1..200)
+        assertEquals(Graphemes.count(post.composedText), post.characterCount)
     }
 
     @Test
-    fun `분위기·비중·글자수 조합 전반에서 글자 수가 정확하다`() = runTest {
+    fun `분위기·내 글 반영·글자수 조합 전반에서 목표를 넘지 않는다`() = runTest {
         for (mood in PostMood.entries) {
             for (length in PostLength.entries) {
                 for (count in listOf(50, 100, 180, 250, 500)) {
                     val post = generator.generate(idea, mood, length, profileWith(count))
-                    assertEquals(
-                        "mood=$mood length=$length count=$count",
-                        count,
-                        Graphemes.count(post.composedText)
-                    )
+                    val actual = Graphemes.count(post.composedText)
+                    assertTrue("mood=$mood length=$length count=$count actual=$actual", actual in 1..count)
                 }
             }
         }
@@ -69,10 +67,10 @@ class DeterministicCaptionGeneratorTest {
     }
 
     @Test
-    fun `이모지 미사용 프로필도 형식 규칙을 통과한다`() = runTest {
-        val profile = profileWith(200, usesEmoji = false)
+    fun `이모지 안 씀 프로필도 검증 규칙을 통과한다`() = runTest {
+        val profile = profileWith(200, emojiIntensity = EmojiIntensity.NONE)
         val post = generator.generate(idea, PostMood.CALM, PostLength.SHORT, profile)
-        assertEquals(200, post.characterCount)
+        assertTrue(post.characterCount in 1..200)
         val validation = CaptionValidationReport.evaluate(
             post.composedText,
             ExternalPromptBuilder.validationContext(profile)
@@ -81,10 +79,10 @@ class DeterministicCaptionGeneratorTest {
     }
 
     @Test
-    fun `첫 줄은 아이디어에서 뽑은 한글 해시태그 2개다`() = runTest {
+    fun `첫 줄은 사용자의 핵심 내용을 보존한다`() = runTest {
         val post = generator.generate(idea, PostMood.WITTY, PostLength.MEDIUM, profileWith(200))
         val firstLine = post.composedText.split("\n").first()
-        assertEquals("#오늘 #아침", firstLine)
+        assertTrue(firstLine.startsWith("오늘 아침 한강"))
     }
 
     @Test

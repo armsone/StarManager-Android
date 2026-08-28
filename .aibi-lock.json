@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "repositories": {
     "starmanager-android": {
-      "version": "0.1.1",
+      "version": "0.2.0",
       "files": {
         "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAIModels.kt": {
-          "sha256": "5d733554ad9d2679e04fff3f939e5482b292b0dcd20f661127547c6a7145ea33",
+          "sha256": "36f7fd6b3f76d3d663e379e313e2ecd2db6485a7a2388176af8e1ee01515146b",
           "source": "profiles/starmanager/distribution/android/ExternalAIModels.kt"
         },
         "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAIScripts.kt": {
-          "sha256": "dab988501f3edeb1c695a0ccacc82e25f204158965e79610e78b2b0d3d94899e",
+          "sha256": "94694cea75947adaa4839905575730e86c244f117e6eb1c809982b01e942478e",
           "source": "profiles/starmanager/distribution/android/ExternalAIScripts.kt"
         },
         "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAISecurityPolicy.kt": {
@@ -40,5 +40,5 @@
     }
   },
   "consumer": "starmanager",
-  "aibiVersion": "0.1.1"
+  "aibiVersion": "0.2.0"
 }

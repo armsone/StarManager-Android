@@ -3,6 +3,7 @@ package com.armsone.starmanager
 import com.armsone.starmanager.model.CaptionFormatReport
 import com.armsone.starmanager.model.CaptionValidationContext
 import com.armsone.starmanager.model.CaptionValidationReport
+import com.armsone.starmanager.model.EmojiIntensity
 import com.armsone.starmanager.text.Graphemes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -11,118 +12,90 @@ import org.junit.Test
 
 class CaptionReportsTest {
 
-    /** 형식 규칙을 모두 지키는 짧은 예시(글자 수는 동적으로 맞춰 검사). */
-    private val compliant = listOf(
+    private val sampleText = listOf(
         "#오늘 #한강",
-        "🌿강바람이 좋았다.",
-        "천천히 걷다 보니 마음도 느려졌다.",
-        "🌙 고요하게 채운 하루의 기록 🌙"
+        "강바람이 시원하게 불어오는 저녁.",
+        "천천히 걸으며 하루를 정리했다."
     ).joinToString("\n")
 
-    private fun requiredCount(text: String) = Graphemes.count(text)
-
     @Test
-    fun `규칙을 지키면 통과한다`() {
-        val report = CaptionFormatReport.evaluate(compliant, requiredCount(compliant))
-        assertTrue(report.failedRuleDescriptions.joinToString(), report.passesAllRules)
+    fun `게시 기준 글자 수 이내이면 포맷 리포트를 통과한다`() {
+        val report = CaptionFormatReport.evaluate(sampleText, destinationLimit = 2200)
+        assertTrue(report.passesAllRules)
+        assertTrue(report.isWithinDestinationLimit)
+        assertEquals(0, report.failedRuleDescriptions.size)
+        assertEquals(Graphemes.count(sampleText), report.characterCount)
     }
 
     @Test
-    fun `글자 수가 다르면 실패하고 설명에 현재 글자 수가 담긴다`() {
-        val report = CaptionFormatReport.evaluate(compliant, requiredCount(compliant) + 1)
+    fun `게시 기준 글자 수를 초과하면 포맷 리포트가 실패한다`() {
+        val report = CaptionFormatReport.evaluate(sampleText, destinationLimit = 10)
         assertFalse(report.passesAllRules)
-        assertTrue(report.failedRuleDescriptions.first().contains("공백 포함"))
-        assertTrue(report.failedRuleDescriptions.first().contains("현재 ${requiredCount(compliant)}자"))
+        assertFalse(report.isWithinDestinationLimit)
+        assertEquals(1, report.failedRuleDescriptions.size)
+        assertTrue(report.failedRuleDescriptions.first().contains("게시 기준 10자 이내"))
     }
 
     @Test
-    fun `첫 줄 해시태그 규칙 위반을 잡아낸다`() {
-        val bad = compliant.replaceFirst("#오늘 #한강", "#오늘 #Han강")
-        val report = CaptionFormatReport.evaluate(bad, requiredCount(bad))
-        assertFalse(report.firstLineHasTwoKoreanHashtags)
-
-        val single = compliant.replaceFirst("#오늘 #한강", "#오늘")
-        assertFalse(
-            CaptionFormatReport.evaluate(single, requiredCount(single)).firstLineHasTwoKoreanHashtags
-        )
-    }
-
-    @Test
-    fun `문장 중간 마침표를 잡아낸다`() {
-        val bad = compliant.replace("좋았다.", "좋았다. 정말")
-        val report = CaptionFormatReport.evaluate(bad, requiredCount(bad))
-        assertFalse(report.periodsAlwaysEndLines)
-    }
-
-    @Test
-    fun `전체 따옴표를 잡아낸다`() {
-        val bad = "\"$compliant\""
-        val report = CaptionFormatReport.evaluate(bad, requiredCount(bad))
-        assertFalse(report.hasNoFullTextQuotes)
-    }
-
-    @Test
-    fun `첫 줄이나 문장 중간 이모지를 잡아낸다`() {
-        val firstLineEmoji = compliant.replaceFirst("#오늘 #한강", "#오늘 #한강🌿")
-        assertFalse(
-            CaptionFormatReport.evaluate(firstLineEmoji, requiredCount(firstLineEmoji))
-                .emojiUsageIsRestrained
-        )
-        val midEmoji = compliant.replace("걷다 보니", "걷다🌿 보니")
-        assertFalse(
-            CaptionFormatReport.evaluate(midEmoji, requiredCount(midEmoji)).emojiUsageIsRestrained
-        )
-    }
-
-    @Test
-    fun `마지막 줄 요약은 이모지로 감싸야 한다`() {
-        val bad = compliant.replace("🌙 고요하게 채운 하루의 기록 🌙", "고요하게 채운 하루의 기록")
-        val report = CaptionFormatReport.evaluate(bad, requiredCount(bad))
-        assertFalse(report.lastLineIsEmojiWrappedSummary)
-    }
-
-    @Test
-    fun `검증 리포트는 금지 표현을 대소문자 무시로 찾는다`() {
+    fun `검증 리포트는 금지 표현을 대소문자 무시하고 찾아낸다`() {
         val context = CaptionValidationContext(
-            requiredCharacterCount = requiredCount(compliant),
-            prohibitedPhrases = "강바람, Nothing;여기없음",
-            allowsBodyEmoji = true
+            destinationLimit = 2200,
+            prohibitedPhrases = "강바람, nothing;없는단어",
+            emojiIntensity = EmojiIntensity.LOW
         )
-        val report = CaptionValidationReport.evaluate(compliant, context)
+        val report = CaptionValidationReport.evaluate(sampleText, context)
         assertEquals(listOf("강바람"), report.prohibitedPhraseMatches)
         assertFalse(report.passesAllRules)
-        assertTrue(report.failedRuleDescriptions.any { it.contains("금지 표현 제외") })
+        assertTrue(report.failedRuleDescriptions.any { it.contains("금지 표현 제외: 강바람") })
     }
 
     @Test
-    fun `본문 이모지 설정을 검사한다`() {
-        val context = CaptionValidationContext(
-            requiredCharacterCount = requiredCount(compliant),
+    fun `이모지 안 씀 설정일 때 이모지가 있으면 검증 리포트가 실패한다`() {
+        val textWithEmoji = "$sampleText 🌿"
+        val contextNone = CaptionValidationContext(
+            destinationLimit = 2200,
             prohibitedPhrases = "",
-            allowsBodyEmoji = false
+            emojiIntensity = EmojiIntensity.NONE
         )
-        val report = CaptionValidationReport.evaluate(compliant, context)
-        // 본문(🌿강바람...)에 이모지가 있으므로 위반
-        assertFalse(report.respectsBodyEmojiPreference)
+        val reportNone = CaptionValidationReport.evaluate(textWithEmoji, contextNone)
+        assertFalse(reportNone.respectsEmojiNonePreference)
+        assertFalse(reportNone.passesAllRules)
+        assertTrue(reportNone.failedRuleDescriptions.contains("이모지 안 씀 설정 준수"))
+
+        val contextLow = CaptionValidationContext(
+            destinationLimit = 2200,
+            prohibitedPhrases = "",
+            emojiIntensity = EmojiIntensity.LOW
+        )
+        val reportLow = CaptionValidationReport.evaluate(textWithEmoji, contextLow)
+        assertTrue(reportLow.respectsEmojiNonePreference)
+        assertTrue(reportLow.passesAllRules)
     }
 
     @Test
-    fun `글자 수 표기와 최소 문단 수를 검사한다`() {
-        val withLabel = compliant.replace("강바람이 좋았다.", "강바람이 좋았다 200자.")
+    fun `글자 수 표기 라벨이 포함되어 있으면 검증 리포트가 실패한다`() {
+        val withCountLabel = "$sampleText (200자)"
         val context = CaptionValidationContext(
-            requiredCharacterCount = requiredCount(withLabel),
+            destinationLimit = 2200,
             prohibitedPhrases = "",
-            allowsBodyEmoji = true
+            emojiIntensity = EmojiIntensity.LOW
         )
-        assertFalse(CaptionValidationReport.evaluate(withLabel, context).hasNoCharacterCountLabel)
+        val report = CaptionValidationReport.evaluate(withCountLabel, context)
+        assertFalse(report.hasNoCharacterCountLabel)
+        assertFalse(report.passesAllRules)
+        assertTrue(report.failedRuleDescriptions.contains("글자 수 표기 금지"))
+    }
 
-        val short = "#오늘 #한강\n🌙 요약 🌙"
-        val shortContext = CaptionValidationContext(
-            requiredCharacterCount = requiredCount(short),
-            prohibitedPhrases = "",
-            allowsBodyEmoji = true
+    @Test
+    fun `모든 규칙을 준수하면 검증 리포트를 통과한다`() {
+        val context = CaptionValidationContext(
+            destinationLimit = 2200,
+            prohibitedPhrases = "금지단어1, 금지단어2",
+            emojiIntensity = EmojiIntensity.HIGH
         )
-        assertFalse(CaptionValidationReport.evaluate(short, shortContext).hasMinimumLineCount)
+        val report = CaptionValidationReport.evaluate(sampleText, context)
+        assertTrue(report.passesAllRules)
+        assertEquals(0, report.failedRuleDescriptions.size)
     }
 
     @Test
@@ -135,5 +108,6 @@ class CaptionReportsTest {
         assertFalse(Graphemes.isEmojiCluster("가"))
         assertTrue(Graphemes.isHangulCluster("가"))
         assertFalse(Graphemes.isHangulCluster("a"))
+        assertFalse(Graphemes.containsEmoji("오늘 날씨 맑음"))
     }
 }

@@ -1,6 +1,7 @@
 package com.armsone.starmanager.ui.composer
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ContentValues
 import android.content.Context
@@ -11,24 +12,36 @@ import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.os.Environment
+import android.os.SystemClock
 import android.provider.MediaStore
+import android.view.Gravity
+import android.view.InputDevice
+import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
+import android.webkit.CookieManager
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.FrameLayout
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -47,38 +60,42 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DirectionsWalk
-import androidx.compose.material.icons.filled.EmojiPeople
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Forum
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.KeyboardReturn
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.SmartDisplay
 import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.outlined.Accessibility
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.outlined.ContentPaste
-import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Diamond
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -88,7 +105,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -98,7 +114,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
@@ -117,56 +132,39 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.armsone.starmanager.R
+import com.armsone.starmanager.design.BrandSectionTitle
 import com.armsone.starmanager.design.BrandTheme
 import com.armsone.starmanager.design.GlossyPrimaryButton
 import com.armsone.starmanager.design.IconWell
 import com.armsone.starmanager.design.IconWellVariant
 import com.armsone.starmanager.design.LocalAppAppearance
+import com.armsone.starmanager.design.StarAdaptiveSegmentedControl
 import com.armsone.starmanager.design.StarSegmentedControl
 import com.armsone.starmanager.design.StarSlider
 import com.armsone.starmanager.design.oxbloodPreferenceCard
 import com.armsone.starmanager.design.starCard
 import com.armsone.starmanager.model.AppAppearance
-import com.armsone.starmanager.model.GenerationStylePreset
+import com.armsone.starmanager.model.AudienceAgeGroup
+import com.armsone.starmanager.model.CreatorProfile
+import com.armsone.starmanager.model.EmojiIntensity
+import com.armsone.starmanager.model.LineBreakFrequency
+import com.armsone.starmanager.model.PostDestination
 import com.armsone.starmanager.model.PostLength
 import com.armsone.starmanager.model.PostMood
+import com.armsone.starmanager.model.PostStyle
+import com.armsone.starmanager.model.PostTone
 import com.armsone.starmanager.service.DirectAIProvider
-import android.annotation.SuppressLint
-import android.os.SystemClock
-import android.view.InputDevice
-import android.view.KeyEvent
-import android.view.MotionEvent
-import android.view.ViewGroup
-import android.view.Gravity
-import android.view.inputmethod.InputMethodManager
-import android.webkit.CookieManager
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import android.widget.FrameLayout
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.viewinterop.AndroidView
-import com.armsone.starmanager.ui.externalai.ExternalAIDomErrorResult
 import com.armsone.starmanager.ui.externalai.ExternalAIAutomationPhase
 import com.armsone.starmanager.ui.externalai.ExternalAIErrorSanitizer
 import com.armsone.starmanager.ui.externalai.ExternalAIFallbackClassifier
@@ -174,29 +172,32 @@ import com.armsone.starmanager.ui.externalai.ExternalAIFallbackReason
 import com.armsone.starmanager.ui.externalai.ExternalAIPollResult
 import com.armsone.starmanager.ui.externalai.ExternalAIScripts
 import com.armsone.starmanager.ui.externalai.ExternalAISecurityPolicy
-import com.armsone.starmanager.ui.externalai.ExternalAISurface
-import com.armsone.starmanager.ui.externalai.ExternalAISurfaceMode
 import com.armsone.starmanager.ui.externalai.ExternalAIStabilityReducer
 import com.armsone.starmanager.ui.externalai.ExternalAIStabilityState
-import com.armsone.starmanager.ui.externalai.ExternalAITimingProfile
+import com.armsone.starmanager.ui.externalai.ExternalAISurface
+import com.armsone.starmanager.ui.externalai.ExternalAISurfaceMode
 import com.armsone.starmanager.ui.externalai.ExternalAITimerFormatter
+import com.armsone.starmanager.ui.externalai.ExternalAITimingProfile
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.UUID
 import kotlin.coroutines.resume
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 fun ComposerScreen(viewModel: ComposerViewModel) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val profile by viewModel.profileStore.profile.collectAsStateWithLifecycle()
     val scrollState = rememberScrollState()
     val appearance = LocalAppAppearance.current
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+
     val dismissKeyboardOnUserScroll = remember(focusManager, keyboardController) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -209,65 +210,6 @@ fun ComposerScreen(viewModel: ComposerViewModel) {
         }
     }
 
-    BoxWithConstraints(
-        Modifier
-            .fillMaxSize()
-            .background(BrandTheme.canvasBrush(appearance))
-    ) {
-        // iOS horizontalSizeClass == .regular 대응: 600dp 이상이면 2열.
-        val isRegular = maxWidth >= 600.dp
-        val horizontalPadding = if (isRegular) 24.dp else 16.dp
-        val verticalPadding = if (isRegular) 20.dp else 12.dp
-        val contentMaxWidth = if (isRegular) 1120.dp else 680.dp
-
-        Column(
-            Modifier
-                .fillMaxSize()
-                .nestedScroll(dismissKeyboardOnUserScroll)
-                .verticalScroll(scrollState)
-                .padding(horizontal = horizontalPadding, vertical = verticalPadding),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            if (isRegular) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = contentMaxWidth),
-                    horizontalArrangement = Arrangement.spacedBy(20.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Box(Modifier.weight(1f)) {
-                        CreationColumn(viewModel, state)
-                    }
-                    Box(Modifier.weight(1f)) { PreviewColumn(viewModel, state) }
-                }
-            } else {
-                Column(
-                    Modifier.widthIn(max = contentMaxWidth),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    CreationColumn(viewModel, state)
-                    PreviewColumn(viewModel, state)
-                }
-            }
-        }
-    }
-}
-
-// MARK: - 만들기 카드
-
-@Composable
-@OptIn(ExperimentalFoundationApi::class)
-private fun CreationColumn(
-    viewModel: ComposerViewModel,
-    state: ComposerUiState
-) {
-    val context = LocalContext.current
-    val focusManager = LocalFocusManager.current
-    val keyboardController = LocalSoftwareKeyboardController.current
-    val appearance = LocalAppAppearance.current
-    val profile by viewModel.profileStore.profile.collectAsStateWithLifecycle()
-
     LaunchedEffect(state.lastImportSuccessToken) {
         if (state.lastImportSuccessToken > 0L) {
             focusManager.clearFocus(force = true)
@@ -279,7 +221,6 @@ private fun CreationColumn(
     val photoPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(maxItems = if (maxSelection < 2) 2 else maxSelection)
     ) { uris ->
-        // maxItems<2가 계약상 불가하므로 초과분은 뷰모델에서 8개 제한으로 잘라낸다.
         viewModel.addPickedMedia(uris.take(maxSelection), context.contentResolver)
     }
 
@@ -320,8 +261,6 @@ private fun CreationColumn(
         }
     }
 
-    val scope = rememberCoroutineScope()
-
     var showsContinuousCamera by rememberSaveable { mutableStateOf(false) }
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -346,175 +285,670 @@ private fun CreationColumn(
         )
     }
 
-    Column(
+    Box(
         Modifier
-            .widthIn(max = 540.dp)
-            .fillMaxWidth()
-            .starCard(appearance)
-            .testTag("composer.creationCard"),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+            .fillMaxSize()
+            .background(BrandTheme.canvasBrush(appearance))
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            Text(
-                "오늘 어떤 이야기를 전할까요?",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = BrandTheme.labelPrimary(appearance),
-                lineHeight = 26.sp,
-                maxLines = 2
-            )
-            if (appearance == AppAppearance.BK) {
-                Box(
-                    modifier = Modifier
-                        .size(width = 36.dp, height = 3.dp)
-                        .background(BrandTheme.accent, RoundedCornerShape(1.5.dp))
-                )
-            }
-        }
-
-        IdeaField(
-            value = state.idea,
-            onValueChange = viewModel::setIdea,
-            appearance = appearance,
-            modifier = Modifier.testTag("composer.idea")
-        )
-
-        Row(
-            modifier = Modifier.padding(horizontal = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        Column(
+            Modifier
+                .fillMaxSize()
+                .nestedScroll(dismissKeyboardOnUserScroll)
+                .verticalScroll(scrollState)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(
-                Icons.Outlined.Palette,
-                contentDescription = null,
-                tint = BrandTheme.labelSecondary(appearance),
-                modifier = Modifier.size(15.dp)
-            )
-            Text(
-                "${profile.mood.rawValue} · 이야기 비중 ${profile.preferredLength.storyWeightTitle} · ${profile.controls.characterCount}자 — 나의 취향 탭에서 조절",
-                fontSize = 13.sp,
-                color = BrandTheme.labelSecondary(appearance),
-                modifier = Modifier.testTag("composer.styleSummary")
-            )
-        }
-
-        AiChoiceButtons(viewModel, state)
-
-        if (state.generatedPost != null) {
-            val mediaSectionShape = RoundedCornerShape(14.dp)
             Column(
-                modifier = Modifier
+                Modifier
+                    .widthIn(max = 680.dp)
                     .fillMaxWidth()
-                    .dragAndDropTarget(
-                        shouldStartDragAndDrop = { event ->
-                            MediaAttachmentPolicy.availableSlots(state.mediaItems.size) > 0 &&
-                                event.mimeTypes().any { mime ->
-                                    mime.startsWith("image/") || mime.startsWith("video/")
-                                }
-                        },
-                        target = mediaDropTarget
-                    )
-                    .then(
-                        if (isMediaDropTargeted) {
-                            Modifier.border(2.dp, BrandTheme.accent, mediaSectionShape)
-                        } else {
-                            Modifier
-                        }
-                    ),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .starCard(appearance)
+                    .testTag("composer.creationCard"),
+                verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconWell(
-                        icon = Icons.Filled.PhotoLibrary,
-                        appearance = appearance,
-                        size = 24.dp,
-                        iconSize = 14.dp
+                // 1. 헤로 문구
+                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text(
+                        "오늘 어떤 이야기를 전할까요?",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = BrandTheme.labelPrimary(appearance),
+                        lineHeight = 26.sp,
+                        maxLines = 2
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Text("미디어", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = BrandTheme.labelPrimary(appearance))
+                    if (appearance == AppAppearance.BK) {
+                        Box(
+                            modifier = Modifier
+                                .size(width = 36.dp, height = 3.dp)
+                                .background(BrandTheme.accent, RoundedCornerShape(1.5.dp))
+                        )
+                    }
                 }
 
-                StarSegmentedControl(
-                    options = PreviewAspect.entries.map { it.title },
-                    selectedIndex = PreviewAspect.entries.indexOf(state.previewAspect),
-                    appearance = appearance,
-                    onSelect = { viewModel.setPreviewAspect(PreviewAspect.entries[it]) },
-                    modifier = Modifier.testTag("composer.aspect")
+                // 2. 글쓰기 설정 카드 (CreatorProfileStore 바인딩)
+                WritingSettingsCard(
+                    viewModel = viewModel,
+                    profile = profile,
+                    appearance = appearance
                 )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    BorderedActionButton(
-                        title = "미디어",
-                        icon = if (state.mediaItems.isEmpty()) Icons.Filled.AddPhotoAlternate else Icons.Filled.CheckCircle,
-                        enabled = !state.isLoadingMedia &&
-                            MediaAttachmentPolicy.availableSlots(state.mediaItems.size) > 0,
-                        appearance = appearance,
-                        onClick = {
-                            photoPicker.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
-                            )
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("composer.pickMedia")
-                    )
-                    BorderedActionButton(
-                        title = "카메라",
-                        icon = Icons.Filled.PhotoCamera,
-                        enabled = MediaAttachmentPolicy.availableSlots(state.mediaItems.size) > 0,
-                        appearance = appearance,
-                        onClick = {
-                            val hasCamera = context.packageManager
-                                .hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
-                            if (!hasCamera) {
-                                viewModel.cameraUnavailable()
+                // 3. 미디어 섹션 (미디어 우선 작문 흐름)
+                val mediaSectionShape = RoundedCornerShape(14.dp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .dragAndDropTarget(
+                            shouldStartDragAndDrop = { event ->
+                                MediaAttachmentPolicy.availableSlots(state.mediaItems.size) > 0 &&
+                                    event.mimeTypes().any { mime ->
+                                        mime.startsWith("image/") || mime.startsWith("video/")
+                                    }
+                            },
+                            target = mediaDropTarget
+                        )
+                        .then(
+                            if (isMediaDropTargeted) {
+                                Modifier.border(2.dp, BrandTheme.accent, mediaSectionShape)
                             } else {
-                                val permissions = buildList {
-                                    add(Manifest.permission.CAMERA)
-                                    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                                }.filter {
-                                    ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
-                                }
-                                if (permissions.isEmpty()) showsContinuousCamera = true
-                                else cameraPermissionLauncher.launch(permissions.toTypedArray())
+                                Modifier
                             }
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("composer.camera")
+                        ),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    BrandSectionTitle(
+                        title = "미디어",
+                        icon = Icons.Filled.PhotoLibrary,
+                        appearance = appearance
+                    )
+                    Text(
+                        "미디어를 먼저 골라두면, 그에 어울리는 이야기를 적기 쉬워요. 미디어 없이 글부터 써도 괜찮아요.",
+                        fontSize = 12.sp,
+                        color = BrandTheme.labelSecondary(appearance)
+                    )
+
+                    StarSegmentedControl(
+                        options = PreviewAspect.entries.map { it.title },
+                        selectedIndex = PreviewAspect.entries.indexOf(state.previewAspect),
+                        appearance = appearance,
+                        onSelect = { viewModel.setPreviewAspect(PreviewAspect.entries[it]) },
+                        modifier = Modifier.testTag("composer.aspect")
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        BorderedActionButton(
+                            title = "미디어",
+                            icon = if (state.mediaItems.isEmpty()) Icons.Filled.AddPhotoAlternate else Icons.Filled.CheckCircle,
+                            enabled = !state.isLoadingMedia &&
+                                MediaAttachmentPolicy.availableSlots(state.mediaItems.size) > 0,
+                            appearance = appearance,
+                            onClick = {
+                                photoPicker.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+                                )
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("composer.pickMedia")
+                        )
+                        BorderedActionButton(
+                            title = "카메라",
+                            icon = Icons.Filled.PhotoCamera,
+                            enabled = MediaAttachmentPolicy.availableSlots(state.mediaItems.size) > 0,
+                            appearance = appearance,
+                            onClick = {
+                                val hasCamera = context.packageManager
+                                    .hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
+                                if (!hasCamera) {
+                                    viewModel.cameraUnavailable()
+                                } else {
+                                    val permissions = buildList {
+                                        add(Manifest.permission.CAMERA)
+                                        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                                    }.filter {
+                                        ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+                                    }
+                                    if (permissions.isEmpty()) showsContinuousCamera = true
+                                    else cameraPermissionLauncher.launch(permissions.toTypedArray())
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("composer.camera")
+                        )
+                    }
+
+                    if (state.mediaItems.isNotEmpty()) {
+                        MediaOrderEditor(viewModel, state)
+                    }
+
+                    if (state.mediaItems.isNotEmpty() || state.isLoadingMedia) {
+                        MediaPreview(state.mediaItems, state.previewAspect.ratio, state.isLoadingMedia)
+                    }
+                }
+
+                // 4. 이야기 / 초안 단일 편집 필드 (생성/외부 결과도 동일 필드에 반영)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    val source = state.activeCaptionSource
+                    if (source != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                sourceIcon(source),
+                                contentDescription = null,
+                                tint = BrandTheme.labelSecondary(appearance),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                source.title,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = BrandTheme.labelSecondary(appearance)
+                            )
+                        }
+                    }
+
+                    IdeaField(
+                        value = state.idea,
+                        onValueChange = viewModel::setIdea,
+                        isGenerating = state.isGenerating,
+                        appearance = appearance,
+                        modifier = Modifier.testTag("composer.idea")
+                    )
+
+                    // 실시간 검증 리포트
+                    if (state.idea.trim().isNotEmpty()) {
+                        val validation = viewModel.activeValidationReport()
+                        if (validation != null) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Icon(
+                                        if (validation.passesAllRules) Icons.Filled.Verified else Icons.Filled.Warning,
+                                        contentDescription = null,
+                                        tint = if (validation.passesAllRules) BrandTheme.green else BrandTheme.orange,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(
+                                        if (validation.passesAllRules) "기준 통과" else "확인 필요",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (validation.passesAllRules) BrandTheme.green else BrandTheme.orange,
+                                        modifier = Modifier.testTag("preview.validation")
+                                    )
+                                }
+                                Spacer(Modifier.weight(1f))
+                                Text(
+                                    "${validation.format.characterCount} / ${validation.format.destinationLimit}자",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = BrandTheme.labelPrimary(appearance),
+                                    modifier = Modifier.testTag("preview.characterCount")
+                                )
+                            }
+
+                            if (!validation.passesAllRules) {
+                                Text(
+                                    validation.failedRuleDescriptions.joinToString(" · "),
+                                    fontSize = 11.sp,
+                                    color = BrandTheme.orange,
+                                    lineHeight = 15.sp
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 5. 스타일 요약 문구
+                Row(
+                    modifier = Modifier.padding(horizontal = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.Palette,
+                        contentDescription = null,
+                        tint = BrandTheme.labelSecondary(appearance),
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Text(
+                        "${profile.destination.title} · ${profile.mood.rawValue} · ${profile.style.title} · ${profile.tone.title} · 목표 ${profile.controls.characterCount}자",
+                        fontSize = 13.sp,
+                        color = BrandTheme.labelSecondary(appearance),
+                        modifier = Modifier.testTag("composer.styleSummary")
                     )
                 }
 
-                if (state.mediaItems.isNotEmpty()) {
-                    MediaOrderEditor(viewModel, state)
-                }
-            }
-        }
+                // 6. AI 생성 버튼 (Gemini, ChatGPT, Claude, 기기 AI)
+                AiChoiceButtons(viewModel, state)
 
-        val message = state.errorMessage ?: state.statusMessage
-        if (message != null) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(
-                    if (state.errorMessage == null) Icons.Filled.CheckCircle else Icons.Filled.Warning,
-                    contentDescription = null,
-                    tint = if (state.errorMessage == null) BrandTheme.accent else BrandTheme.red,
-                    modifier = Modifier.size(16.dp)
-                )
-                Text(
-                    message,
-                    fontSize = 13.sp,
-                    color = if (state.errorMessage == null) BrandTheme.accent else BrandTheme.red,
-                    modifier = Modifier.testTag("composer.message")
-                )
+                // 7. 공유 버튼 (게시 대상 일반화 라벨, 현재 편집된 텍스트 공유)
+                if (state.idea.trim().isNotEmpty()) {
+                    val shareEnabled = !state.isPreparingShare && !state.isGenerating
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        GlossyPrimaryButton(
+                            onClick = {
+                                scope.launch {
+                                    val intent = viewModel.prepareShare(context)
+                                    if (intent != null) {
+                                        val chooser = Intent.createChooser(intent, null).apply {
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(chooser)
+                                    }
+                                }
+                            },
+                            enabled = shareEnabled,
+                            appearance = appearance,
+                            modifier = Modifier.testTag("preview.share")
+                        ) {
+                            if (state.isPreparingShare) {
+                                CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                                Spacer(Modifier.width(8.dp))
+                            } else {
+                                Icon(Icons.Filled.Send, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            Text(
+                                if (state.isPreparingShare) "준비 중" else "${profile.destination.title}으로 →",
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                if (state.shareMessageIsError) Icons.Filled.Warning else Icons.Outlined.Info,
+                                contentDescription = null,
+                                tint = if (state.shareMessageIsError) BrandTheme.red else BrandTheme.labelSecondary(appearance),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                state.shareMessage ?: "문구는 자동 복사됩니다",
+                                fontSize = 12.sp,
+                                color = if (state.shareMessageIsError) BrandTheme.red else BrandTheme.labelSecondary(appearance),
+                                modifier = Modifier.testTag("preview.shareMessage")
+                            )
+                        }
+                    }
+                }
+
+                // 상태 또는 에러 메시지
+                val message = state.errorMessage ?: state.statusMessage
+                if (message != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            if (state.errorMessage == null) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                            contentDescription = null,
+                            tint = if (state.errorMessage == null) BrandTheme.accent else BrandTheme.red,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            message,
+                            fontSize = 13.sp,
+                            color = if (state.errorMessage == null) BrandTheme.accent else BrandTheme.red,
+                            modifier = Modifier.testTag("composer.message")
+                        )
+                    }
+                }
             }
         }
     }
 }
 
+// MARK: - 글쓰기 설정 카드
+
+@Composable
+private fun WritingSettingsCard(
+    viewModel: ComposerViewModel,
+    profile: CreatorProfile,
+    appearance: AppAppearance
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .oxbloodPreferenceCard(appearance),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        BrandSectionTitle(
+            title = "글쓰기 설정",
+            icon = Icons.Filled.Tune,
+            appearance = appearance,
+            variant = IconWellVariant.OXBLOOD
+        )
+
+        // 게시할 곳
+        SettingsRow(title = "게시할 곳", icon = Icons.Filled.Send, appearance = appearance) {
+            StarAdaptiveSegmentedControl(
+                options = PostDestination.entries.map { it.title },
+                selectedIndex = PostDestination.entries.indexOf(profile.destination),
+                onSelect = { index ->
+                    viewModel.profileStore.updateProfile { it.copy(destination = PostDestination.entries[index]) }
+                },
+                appearance = appearance,
+                modifier = Modifier.testTag("settings.destination")
+            )
+            Text(
+                profile.destination.limitBasisDescription,
+                fontSize = 11.sp,
+                color = BrandTheme.labelSecondary(appearance)
+            )
+        }
+
+        // 목표 글자 수
+        val maxAllowed = minOf(500, profile.destination.characterLimit)
+        SettingsRow(title = "글자 수", icon = Icons.Filled.FormatSize, appearance = appearance) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "${profile.controls.characterCount}자",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = BrandTheme.labelPrimary(appearance)
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "50~${maxAllowed}자",
+                    fontSize = 12.sp,
+                    color = BrandTheme.labelSecondary(appearance)
+                )
+            }
+            StarSlider(
+                value = profile.controls.characterCount.toFloat().coerceIn(50f, maxAllowed.toFloat()),
+                onValueChange = { raw ->
+                    val rounded = (Math.round(raw / 10f) * 10).coerceIn(50, maxAllowed)
+                    viewModel.setCharacterCount(rounded)
+                },
+                valueRange = 50f..maxAllowed.toFloat(),
+                step = 10f,
+                appearance = appearance,
+                modifier = Modifier.testTag("settings.slider.characterCount")
+            )
+        }
+
+        // 이모지 사용
+        SettingsRow(title = "이모지 사용", icon = Icons.Filled.EmojiEmotions, appearance = appearance) {
+            StarAdaptiveSegmentedControl(
+                options = EmojiIntensity.entries.map { it.title },
+                selectedIndex = EmojiIntensity.entries.indexOf(profile.emojiIntensity),
+                onSelect = { index ->
+                    viewModel.profileStore.updateProfile { it.copy(emojiIntensity = EmojiIntensity.entries[index]) }
+                },
+                appearance = appearance,
+                modifier = Modifier.testTag("settings.emojiIntensity")
+            )
+        }
+
+        // 분위기
+        SettingsRow(title = "분위기", icon = Icons.Filled.WbSunny, appearance = appearance) {
+            StarAdaptiveSegmentedControl(
+                options = PostMood.entries.map { it.rawValue },
+                selectedIndex = PostMood.entries.indexOf(profile.mood),
+                onSelect = { index ->
+                    viewModel.setMood(PostMood.entries[index])
+                },
+                appearance = appearance,
+                modifier = Modifier.testTag("settings.mood")
+            )
+        }
+
+        // 스타일
+        SettingsRow(title = "스타일", icon = Icons.Filled.MenuBook, appearance = appearance) {
+            StarAdaptiveSegmentedControl(
+                options = PostStyle.entries.map { it.title },
+                selectedIndex = PostStyle.entries.indexOf(profile.style),
+                onSelect = { index ->
+                    viewModel.profileStore.updateProfile { it.copy(style = PostStyle.entries[index]) }
+                },
+                appearance = appearance,
+                modifier = Modifier.testTag("settings.style")
+            )
+        }
+
+        // 말투
+        SettingsRow(title = "말투", icon = Icons.Filled.ChatBubble, appearance = appearance) {
+            StarAdaptiveSegmentedControl(
+                options = PostTone.entries.map { it.title },
+                selectedIndex = PostTone.entries.indexOf(profile.tone),
+                onSelect = { index ->
+                    viewModel.profileStore.updateProfile { it.copy(tone = PostTone.entries[index]) }
+                },
+                appearance = appearance,
+                modifier = Modifier.testTag("settings.tone")
+            )
+        }
+
+        // 나잇대
+        SettingsRow(title = "나잇대", icon = Icons.Filled.AccessTime, appearance = appearance) {
+            StarAdaptiveSegmentedControl(
+                options = AudienceAgeGroup.entries.map { it.title },
+                selectedIndex = AudienceAgeGroup.entries.indexOf(profile.ageGroup),
+                onSelect = { index ->
+                    viewModel.profileStore.updateProfile { it.copy(ageGroup = AudienceAgeGroup.entries[index]) }
+                },
+                appearance = appearance,
+                modifier = Modifier.testTag("settings.ageGroup")
+            )
+            Text(
+                "나잇대는 프롬프트 힌트로만 쓰이고 다른 설정을 바꾸지 않아요.",
+                fontSize = 11.sp,
+                color = BrandTheme.labelSecondary(appearance)
+            )
+        }
+
+        // 줄넘김
+        SettingsRow(title = "줄넘김", icon = Icons.Filled.KeyboardReturn, appearance = appearance) {
+            StarAdaptiveSegmentedControl(
+                options = LineBreakFrequency.entries.map { it.title },
+                selectedIndex = LineBreakFrequency.entries.indexOf(profile.lineBreakFrequency),
+                onSelect = { index ->
+                    viewModel.profileStore.updateProfile { it.copy(lineBreakFrequency = LineBreakFrequency.entries[index]) }
+                },
+                appearance = appearance,
+                modifier = Modifier.testTag("settings.lineBreakFrequency")
+            )
+        }
+
+        // 내 글 반영
+        SettingsRow(title = "내 글 반영", icon = Icons.Filled.Edit, appearance = appearance) {
+            StarAdaptiveSegmentedControl(
+                options = PostLength.entries.map { it.storyWeightTitle },
+                selectedIndex = PostLength.entries.indexOf(profile.preferredLength),
+                onSelect = { index ->
+                    viewModel.setLength(PostLength.entries[index])
+                },
+                appearance = appearance,
+                modifier = Modifier.testTag("settings.length")
+            )
+            Text(
+                profile.preferredLength.storyWeightExplanation,
+                fontSize = 11.sp,
+                color = BrandTheme.labelSecondary(appearance)
+            )
+        }
+
+        // 주로 쓰는 주제
+        SettingsRow(title = "주로 쓰는 주제", icon = Icons.Filled.Sell, appearance = appearance) {
+            SingleLineInputRow(
+                value = profile.accountTopic,
+                placeholder = "예: 카페 창업 일지",
+                onValueChange = { viewModel.profileStore.updateProfile { p -> p.copy(accountTopic = it) } },
+                appearance = appearance,
+                testTag = "settings.accountTopic"
+            )
+        }
+
+        // 읽을 사람
+        SettingsRow(title = "읽을 사람", icon = Icons.Filled.Group, appearance = appearance) {
+            SingleLineInputRow(
+                value = profile.audience,
+                placeholder = "예: 오픈 예정 매장 팔로워",
+                onValueChange = { viewModel.profileStore.updateProfile { p -> p.copy(audience = it) } },
+                appearance = appearance,
+                testTag = "settings.audience"
+            )
+        }
+
+        // 금지 표현
+        SettingsRow(title = "금지 표현", icon = Icons.Filled.Block, appearance = appearance) {
+            SingleLineInputRow(
+                value = profile.prohibitedPhrases,
+                placeholder = "쉼표로 구분해 적어 주세요",
+                onValueChange = { viewModel.profileStore.updateProfile { p -> p.copy(prohibitedPhrases = it) } },
+                appearance = appearance,
+                testTag = "settings.prohibitedPhrases"
+            )
+        }
+
+        // 해시태그 취향
+        SettingsRow(title = "해시태그 취향", icon = Icons.Filled.Tag, appearance = appearance) {
+            SingleLineInputRow(
+                value = profile.hashtagStyle,
+                placeholder = "예: 핵심 키워드 중심",
+                onValueChange = { viewModel.profileStore.updateProfile { p -> p.copy(hashtagStyle = it) } },
+                appearance = appearance,
+                testTag = "settings.hashtagStyle"
+            )
+        }
+
+        // 추가로 하고 싶은 설정 (여러 줄)
+        SettingsRow(title = "추가로 하고 싶은 설정", icon = Icons.Filled.RateReview, appearance = appearance) {
+            MultilineInputRow(
+                value = profile.detailedGuidelines,
+                placeholder = "예: 이모티콘 대신 물결표를 즐겨 써줘 / 문장은 짧게 끊어줘",
+                onValueChange = { viewModel.profileStore.updateProfile { p -> p.copy(detailedGuidelines = it) } },
+                minLines = 3,
+                maxLines = 8,
+                appearance = appearance,
+                testTag = "settings.detailedGuidelines"
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsRow(
+    title: String,
+    icon: ImageVector,
+    appearance: AppAppearance,
+    content: @Composable () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = BrandTheme.labelPrimary(appearance),
+                modifier = Modifier.size(15.dp)
+            )
+            Text(
+                title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = BrandTheme.labelPrimary(appearance)
+            )
+        }
+        content()
+    }
+}
+
+@Composable
+private fun SingleLineInputRow(
+    value: String,
+    placeholder: String,
+    onValueChange: (String) -> Unit,
+    appearance: AppAppearance,
+    testTag: String
+) {
+    val isBk = appearance == AppAppearance.BK
+    val shape = RoundedCornerShape(10.dp)
+    val bg = if (isBk) Color.White else BrandTheme.surface
+    val border = BorderStroke(0.8.dp, if (isBk) Color(0xFFD6DAE0) else BrandTheme.border)
+
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .border(border, shape)
+            .background(bg, shape)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        if (value.isEmpty()) {
+            Text(placeholder, fontSize = 14.sp, color = BrandTheme.labelSecondary(appearance))
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            textStyle = TextStyle(fontSize = 14.sp, color = BrandTheme.labelPrimary(appearance)),
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(testTag)
+        )
+    }
+}
+
+@Composable
+private fun MultilineInputRow(
+    value: String,
+    placeholder: String,
+    onValueChange: (String) -> Unit,
+    minLines: Int = 3,
+    maxLines: Int = 8,
+    appearance: AppAppearance,
+    testTag: String
+) {
+    val isBk = appearance == AppAppearance.BK
+    val shape = RoundedCornerShape(10.dp)
+    val bg = if (isBk) Color.White else BrandTheme.surface
+    val border = BorderStroke(0.8.dp, if (isBk) Color(0xFFD6DAE0) else BrandTheme.border)
+
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .border(border, shape)
+            .background(bg, shape)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        if (value.isEmpty()) {
+            Text(
+                placeholder,
+                fontSize = 14.sp,
+                color = BrandTheme.labelSecondary(appearance),
+                lineHeight = 19.sp
+            )
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            textStyle = TextStyle(fontSize = 14.sp, color = BrandTheme.labelPrimary(appearance), lineHeight = 19.sp),
+            minLines = minLines,
+            maxLines = maxLines,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(testTag)
+        )
+    }
+}
+
+// MARK: - 단일 이야기 / 초안 텍스트 필드
+
 @Composable
 private fun IdeaField(
     value: String,
     onValueChange: (String) -> Unit,
+    isGenerating: Boolean = false,
     modifier: Modifier = Modifier,
     appearance: AppAppearance = LocalAppAppearance.current
 ) {
@@ -531,68 +965,27 @@ private fun IdeaField(
             .padding(14.dp)
     ) {
         if (value.isEmpty()) {
-            Text("한 줄로 적어 주세요", fontSize = 17.sp, color = BrandTheme.labelSecondary(appearance))
+            Text(
+                "이야기를 적어 주세요 · AI 결과도 여기에 채워져요",
+                fontSize = 16.sp,
+                color = BrandTheme.labelSecondary(appearance),
+                lineHeight = 22.sp
+            )
         }
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
-            textStyle = TextStyle(fontSize = 17.sp, color = BrandTheme.labelPrimary(appearance)),
-            minLines = 2,
-            maxLines = 5,
+            enabled = !isGenerating,
+            textStyle = TextStyle(
+                fontSize = 16.sp,
+                color = BrandTheme.labelPrimary(appearance),
+                lineHeight = 23.sp
+            ),
+            minLines = 3,
+            maxLines = 20,
             modifier = Modifier.fillMaxWidth()
         )
     }
-}
-
-@Composable
-private fun StyleButton(
-    preset: GenerationStylePreset,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    appearance: AppAppearance = LocalAppAppearance.current
-) {
-    val isBk = appearance == AppAppearance.BK
-    val shape = RoundedCornerShape(14.dp)
-    val bg = if (isBk) {
-        if (selected) Color.White else Color(0xFFF1F3F6)
-    } else {
-        if (selected) BrandTheme.paper else BrandTheme.canvas
-    }
-    val borderStroke = if (selected) {
-        BorderStroke(1.5.dp, BrandTheme.accent)
-    } else {
-        if (isBk) BorderStroke(1.dp, Color(0xFFE2E6EC)) else null
-    }
-
-    Column(
-        modifier = modifier
-            .heightIn(min = 58.dp)
-            .then(if (borderStroke != null) Modifier.border(borderStroke, shape) else Modifier)
-            .background(bg, shape)
-            .clickable(onClick = onClick)
-            .padding(vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(5.dp)
-    ) {
-        IconWell(
-            icon = presetIcon(preset),
-            appearance = appearance,
-            variant = if (isBk) {
-                if (selected) IconWellVariant.OXBLOOD else IconWellVariant.CARBON
-            } else IconWellVariant.CARBON,
-            size = 28.dp,
-            iconSize = 16.dp
-        )
-        Text(preset.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = BrandTheme.labelPrimary(appearance))
-    }
-}
-
-private fun presetIcon(preset: GenerationStylePreset): ImageVector = when (preset) {
-    GenerationStylePreset.MZ -> Icons.Filled.EmojiPeople          // figure.wave 근사
-    GenerationStylePreset.GEN_X -> Icons.Filled.DirectionsWalk    // figure.walk 근사
-    GenerationStylePreset.GENERATION_386 -> Icons.Outlined.Accessibility // figure.stand 근사
-    GenerationStylePreset.BABY_BOOM -> Icons.Filled.Person        // person.fill 근사
 }
 
 @Composable
@@ -652,8 +1045,7 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
     val context = LocalContext.current
     val appearance = LocalAppAppearance.current
     val showsExternalAIBrowser by viewModel.profileStore.showsExternalAIBrowser.collectAsStateWithLifecycle()
-    val trimmedIdeaEmpty = state.idea.trim().isEmpty()
-    val isEnabled = !trimmedIdeaEmpty && !state.isGenerating
+    val isEnabled = !state.isGenerating
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         val columns = if (LocalDensity.current.fontScale >= 1.3f) 2 else 4
@@ -711,9 +1103,18 @@ private fun AiChoiceButtons(viewModel: ComposerViewModel, state: ComposerUiState
                 Text("붙여넣기", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = BrandTheme.accent)
             }
         }
+
+        if (viewModel.hasRepresentativePhoto) {
+            Text(
+                "대표 사진은 외부 AI 버튼을 누를 때만 함께 보내요.",
+                fontSize = 11.sp,
+                color = BrandTheme.labelSecondary(appearance),
+                modifier = Modifier.padding(start = 2.dp)
+            )
+        }
     }
 
-    // 설정이 꺼져 있으면 백그라운드 WebView, 켜져 있으면 같은 자동화를 보이는 WebView에서 수행한다.
+    // 설정이 꺼져 있으면 백그라운드 WebView, 켜져 있으면 보이는 WebView에서 수행한다.
     val automationProvider = state.activeAutomationProvider
     if (
         state.isGenerating &&
@@ -794,7 +1195,6 @@ private fun GenerationStatusCard(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 단 하나의 회전 프로그레스 인디케이터
         CircularProgressIndicator(
             modifier = Modifier.size(20.dp),
             color = BrandTheme.accent,
@@ -803,7 +1203,7 @@ private fun GenerationStatusCard(
 
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
-                state.automationStepTitle ?: "게시물을 만드는 중…",
+                state.automationStepTitle ?: "글을 만드는 중…",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = BrandTheme.labelPrimary(appearance),
@@ -873,59 +1273,70 @@ private fun HiddenExternalAIWebView(
             cookieManager.setAcceptCookie(true)
             cookieManager.setAcceptThirdPartyCookies(this, true)
             webViewClient = object : WebViewClient() {
-                        override fun shouldOverrideUrlLoading(
-                            view: WebView?,
-                            request: WebResourceRequest?
-                        ): Boolean {
-                            val targetUrl = request?.url?.toString()
-                            if (!ExternalAISecurityPolicy.isAllowedUrl(targetUrl, provider)) {
-                                isAutomationActive = false
-                                onFallbackRequired(ExternalAIFallbackReason.NAVIGATION_DISALLOWED)
-                                return true
-                            }
-                            val fallback = ExternalAIFallbackClassifier.classifyUrl(targetUrl)
-                            if (fallback != null) {
-                                isAutomationActive = false
-                                onFallbackRequired(fallback)
-                                return true
-                            }
-                            return false
-                        }
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): Boolean {
+                    val targetUrl = request?.url?.toString()
+                    if (!ExternalAISecurityPolicy.isAllowedUrl(targetUrl, provider)) {
+                        isAutomationActive = false
+                        onFallbackRequired(ExternalAIFallbackReason.NAVIGATION_DISALLOWED)
+                        return true
+                    }
+                    val fallback = ExternalAIFallbackClassifier.classifyUrl(targetUrl)
+                    if (fallback != null) {
+                        isAutomationActive = false
+                        onFallbackRequired(fallback)
+                        return true
+                    }
+                    return false
+                }
 
-                        override fun onPageFinished(view: WebView?, url: String?) {
-                            super.onPageFinished(view, url)
-                            cookieManager.flush()
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    cookieManager.flush()
 
-                            val fallback = ExternalAIFallbackClassifier.classifyUrl(url)
-                            if (fallback != null) {
-                                isAutomationActive = false
-                                onFallbackRequired(fallback)
-                            }
-                        }
+                    val fallback = ExternalAIFallbackClassifier.classifyUrl(url)
+                    if (fallback != null) {
+                        isAutomationActive = false
+                        onFallbackRequired(fallback)
+                        return
+                    }
 
-                        override fun onReceivedError(
-                            view: WebView?,
-                            request: WebResourceRequest?,
-                            error: WebResourceError?
-                        ) {
-                            super.onReceivedError(view, request, error)
-                            if (request?.isForMainFrame == true) {
-                                val desc = error?.description?.toString() ?: "연결 실패"
-                                isAutomationActive = false
-                                val sanitized = ExternalAIErrorSanitizer.sanitize("Network error: $desc", provider)
-                                onError(sanitized)
-                            }
-                        }
+                    if (ExternalAISecurityPolicy.isAuthOrigin(url, provider)) {
+                        isAutomationActive = false
+                        onFallbackRequired(ExternalAIFallbackReason.LOGIN_REQUIRED)
+                        return
+                    }
+                }
+
+                override fun onReceivedError(
+                    view: WebView?,
+                    request: WebResourceRequest?,
+                    error: WebResourceError?
+                ) {
+                    super.onReceivedError(view, request, error)
+                    if (request?.isForMainFrame == true) {
+                        val desc = error?.description?.toString() ?: "연결 실패"
+                        val sanitized = ExternalAIErrorSanitizer.sanitize("Network error: $desc", provider)
+                        onError(sanitized)
+                    }
+                }
             }
-            loadUrl(provider.url)
         }
-        hostView?.addView(
-            wv,
-            FrameLayout.LayoutParams((375 * density).toInt(), (667 * density).toInt(), Gravity.TOP or Gravity.START).apply {
-                leftMargin = -10_000
-            }
-        )
+
+        val lp = FrameLayout.LayoutParams(
+            (412 * density).toInt(),
+            (892 * density).toInt()
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            setMargins(-10000, -10000, 0, 0)
+        }
+
+        hostView?.addView(wv, lp)
         webViewRef = wv
+        wv.loadUrl(provider.url)
+
         onDispose {
             isAutomationActive = false
             wv.stopLoading()
@@ -935,189 +1346,81 @@ private fun HiddenExternalAIWebView(
         }
     }
 
-    // AIBI State Machine Coroutine (Readiness -> Submission -> Observation)
-    LaunchedEffect(requestId) {
-        delay(700L)
+    LaunchedEffect(requestId, provider) {
         val wv = webViewRef ?: return@LaunchedEffect
-        val readinessStart = System.currentTimeMillis()
+        val startTime = System.currentTimeMillis()
+        var baselineCaptured = false
         var baselineCount = 0
         var promptInjected = false
+        var promptSubmitted = false
 
-        // 1. 준비(Readiness) 및 주입 루프 (700ms 주기, readinessTimeoutMs 제한)
-        while (isAutomationActive && System.currentTimeMillis() - readinessStart < timings.readinessTimeoutMs && !promptInjected) {
-            val currentUrl = wv.url
-            if (currentUrl.isNullOrBlank() || currentUrl == "about:blank") {
-                delay(timings.readinessCadenceMs)
-                continue
-            }
-            if (!ExternalAISecurityPolicy.canInjectScript(currentUrl, provider)) {
-                val reason = ExternalAIFallbackClassifier.classifyUrl(currentUrl)
-                    ?: ExternalAIFallbackReason.NAVIGATION_DISALLOWED
-                isAutomationActive = false
-                onFallbackRequired(reason)
-                return@LaunchedEffect
-            }
-            val readinessRes = suspendCancellableCoroutine<String?> { cont ->
-                wv.evaluateJavascript(ExternalAIScripts.checkReadinessScript(provider)) { cont.resume(it) }
-            }
-
-            if (readinessRes != null && readinessRes != "null") {
-                val readiness = ExternalAIScripts.parseReadinessResult(readinessRes)
-                val isReady = readiness.isReady
-                val reason = readiness.reason
-
-                when (reason) {
-                    "AUTH_REQUIRED" -> {
-                        isAutomationActive = false
-                        onFallbackRequired(ExternalAIFallbackReason.LOGIN_REQUIRED)
-                        return@LaunchedEffect
-                    }
-                    "SECURITY_CHALLENGE_PRESENTED" -> {
-                        isAutomationActive = false
-                        onFallbackRequired(ExternalAIFallbackReason.SECURITY_VERIFICATION)
-                        return@LaunchedEffect
-                    }
-                }
-
-                if (isReady) {
-                    // 어시스턴트 기준선 기록
+        while (isAutomationActive && System.currentTimeMillis() - startTime < timings.visibleAutoFillTimeoutMs) {
+            val url = wv.url
+            if (ExternalAISecurityPolicy.canInjectScript(url, provider)) {
+                if (!baselineCaptured) {
                     val baselineRes = suspendCancellableCoroutine<String?> { cont ->
                         wv.evaluateJavascript(ExternalAIScripts.recordBaselineScript(provider)) { cont.resume(it) }
                     }
                     baselineCount = ExternalAIScripts.parseBaselineCount(baselineRes)
+                    baselineCaptured = true
+                }
 
-                    // 프롬프트 주입
-                    val injectScript = ExternalAIScripts.injectPromptScript(provider, prompt, force = false)
+                if (!promptInjected) {
                     val injectRes = suspendCancellableCoroutine<String?> { cont ->
-                        wv.evaluateJavascript(injectScript) { cont.resume(it) }
+                        wv.evaluateJavascript(ExternalAIScripts.injectPromptScript(provider, prompt, force = false)) { cont.resume(it) }
                     }
                     val injection = ExternalAIScripts.parseInjectionResult(injectRes)
                     if (injection.success && injection.inputFound) {
-                        wv.evaluateJavascript("if(document.activeElement){document.activeElement.blur();}", null)
-                        wv.clearFocus()
-                        (context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
-                            ?.hideSoftInputFromWindow(wv.windowToken, 0)
                         promptInjected = true
+                    }
+                }
+
+                if (promptInjected && !promptSubmitted) {
+                    delay(350L)
+                    val submitRes = suspendCancellableCoroutine<String?> { cont ->
+                        wv.evaluateJavascript(ExternalAIScripts.submitPromptScript(provider, 1)) { cont.resume(it) }
+                    }
+                    delay(700L)
+                    val verifyRes = suspendCancellableCoroutine<String?> { cont ->
+                        wv.evaluateJavascript(ExternalAIScripts.verifySubmissionScript(provider, baselineCount)) { cont.resume(it) }
+                    }
+                    if (ExternalAIScripts.parseSubmissionVerified(verifyRes)) {
+                        promptSubmitted = true
+                        onSubmitted()
                         break
                     }
                 }
             }
-
-            delay(timings.readinessCadenceMs)
+            delay(timings.observationCadenceMs)
         }
 
-        if (!promptInjected) {
-            isAutomationActive = false
-            onFallbackRequired(ExternalAIFallbackReason.MANUAL_INPUT_REQUIRED)
-            return@LaunchedEffect
-        }
-
-        // 2. 전송(Submission) 에스컬레이션 루프 (15초 제한, 500ms 주기 + 700ms 검증)
-        var submitted = false
-        val submitStart = System.currentTimeMillis()
-        var attempt = 1
-
-        while (isAutomationActive && System.currentTimeMillis() - submitStart < timings.submitTimeoutMs && !submitted) {
-            if (attempt == 1) {
-                val targetResult = suspendCancellableCoroutine<String?> { cont ->
-                    wv.evaluateJavascript(ExternalAIScripts.submitTargetScript(provider)) { cont.resume(it) }
-                }
-                val target = ExternalAIScripts.parseSubmitPoint(targetResult)
-                if (target != null) {
-                    val x = target.first * wv.width
-                    val y = target.second * wv.height
-                    val downTime = SystemClock.uptimeMillis()
-                    MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, x, y, 0).also {
-                        it.source = InputDevice.SOURCE_TOUCHSCREEN
-                        wv.dispatchTouchEvent(it)
-                        it.recycle()
-                    }
-                    delay(80L)
-                    MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, x, y, 0).also {
-                        it.source = InputDevice.SOURCE_TOUCHSCREEN
-                        wv.dispatchTouchEvent(it)
-                        it.recycle()
-                    }
-                } else {
-                    wv.evaluateJavascript(ExternalAIScripts.submitPromptScript(provider, attempt), null)
-                }
-            } else if (attempt == 2) {
-                wv.evaluateJavascript(ExternalAIScripts.focusInputScript(provider), null)
-                wv.requestFocus()
-                delay(80L)
-                wv.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
-                wv.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
-            } else {
-                wv.evaluateJavascript(ExternalAIScripts.submitPromptScript(provider, attempt), null)
-            }
-
-            // 검증 지연 700ms
-            delay(timings.submitVerificationDelayMs)
-
-            // 전송 검증
-            val verifyScript = ExternalAIScripts.verifySubmissionScript(provider, baselineCount)
-            val verifyRes = suspendCancellableCoroutine<String?> { cont ->
-                wv.evaluateJavascript(verifyScript) { cont.resume(it) }
-            }
-
-            if (ExternalAIScripts.parseSubmissionVerified(verifyRes)) {
-                submitted = true
-                onSubmitted()
-                break
-            }
-
-            attempt++
-            delay(timings.submitCadenceMs)
-        }
-
-        if (!submitted) {
-            isAutomationActive = false
+        if (!promptSubmitted && isAutomationActive) {
             onFallbackRequired(ExternalAIFallbackReason.MANUAL_CONFIRMATION)
             return@LaunchedEffect
         }
 
-        // 3. 관찰(Observation) 루프 (700ms 주기, 3회 연속 일치 관측 시 완성)
-        var stability = ExternalAIStabilityState()
+        // 응답 관찰 루프
+        var stabilityState = ExternalAIStabilityState()
         while (isAutomationActive) {
             delay(timings.observationCadenceMs)
-            if (!isAutomationActive) break
-
-            // 오류 감지 (오류는 브라우저를 열지 않고 즉시 중단)
-            val errScript = ExternalAIScripts.extractErrorScript()
-            val errRes = suspendCancellableCoroutine<String?> { cont ->
-                wv.evaluateJavascript(errScript) { cont.resume(it) }
+            val errorRes = suspendCancellableCoroutine<String?> { cont ->
+                wv.evaluateJavascript(ExternalAIScripts.extractErrorScript()) { cont.resume(it) }
             }
-            val domErr = ExternalAIScripts.parseErrorResult(errRes)
-            if (domErr.hasError && !domErr.error.isNullOrBlank()) {
-                isAutomationActive = false
-                val sanitized = ExternalAIErrorSanitizer.sanitize(domErr.error, provider)
+            val domError = ExternalAIScripts.parseErrorResult(errorRes)
+            if (domError.hasError && !domError.error.isNullOrBlank()) {
+                val sanitized = ExternalAIErrorSanitizer.sanitize(domError.error, provider)
                 onError(sanitized)
                 return@LaunchedEffect
             }
 
-            // 보안 챌린지 검사
-            val chScript = ExternalAIScripts.checkChallengeScript()
-            val chRes = suspendCancellableCoroutine<String?> { cont ->
-                wv.evaluateJavascript(chScript) { cont.resume(it) }
+            val answerRes = suspendCancellableCoroutine<String?> { cont ->
+                wv.evaluateJavascript(ExternalAIScripts.extractAnswerScript(provider)) { cont.resume(it) }
             }
-            if (ExternalAIScripts.parseChallengeResult(chRes)) {
-                isAutomationActive = false
-                onFallbackRequired(ExternalAIFallbackReason.SECURITY_VERIFICATION)
-                return@LaunchedEffect
-            }
-
-            // 답변 관찰
-            val ansScript = ExternalAIScripts.extractAnswerScript(provider)
-            val ansRes = suspendCancellableCoroutine<String?> { cont ->
-                wv.evaluateJavascript(ansScript) { cont.resume(it) }
-            }
-            val poll = ExternalAIScripts.parsePollResult(ansRes)
-
-            val nextStability = ExternalAIStabilityReducer.step(stability, poll)
-            stability = nextStability
+            val poll = ExternalAIScripts.parsePollResult(answerRes)
+            val nextStability = ExternalAIStabilityReducer.step(stabilityState, poll)
+            stabilityState = nextStability
 
             if (nextStability.isStable && nextStability.stableAnswer != null) {
-                isAutomationActive = false
                 onSuccess(nextStability.stableAnswer)
                 return@LaunchedEffect
             }
@@ -1125,180 +1428,31 @@ private fun HiddenExternalAIWebView(
     }
 }
 
-@Composable
-private fun AIChoiceCard(
-    choice: AIChoice,
-    enabled: Boolean = true,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    appearance: AppAppearance = LocalAppAppearance.current
-) {
-    val isBk = appearance == AppAppearance.BK
-    val shape = RoundedCornerShape(13.dp)
-    val bg = if (isBk) Color.White else BrandTheme.surface(appearance)
-    val border = BorderStroke(1.dp, if (isBk) Color(0xFFE2E6EC) else BrandTheme.border)
-
-    Column(
-        modifier = modifier
-            .heightIn(min = 62.dp)
-            .graphicsLayer {
-                alpha = if (enabled) 1f else 0.46f
-            }
-            .border(border, shape)
-            .background(bg, shape)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 2.dp, vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp)
-    ) {
-        Box(
-            modifier = Modifier.size(32.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            when (choice) {
-                AIChoice.OnDevice -> Icon(
-                    imageVector = Icons.Filled.AutoAwesome,
-                    contentDescription = null,
-                    tint = BrandTheme.labelPrimary(appearance),
-                    modifier = Modifier.size(24.dp)
-                )
-                is AIChoice.External -> BrandIcon(choice.provider)
-            }
-        }
-        Text(
-            choice.title,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = BrandTheme.labelPrimary(appearance),
-            maxLines = 1
-        )
-    }
-}
-
-@Composable
-private fun DisclosureHeader(
-    title: String,
-    expanded: Boolean,
-    onToggle: () -> Unit,
-    testTag: String,
-    icon: ImageVector? = null,
-    appearance: AppAppearance = LocalAppAppearance.current,
-    variant: IconWellVariant = IconWellVariant.CARBON,
-    titleFontSize: androidx.compose.ui.unit.TextUnit = 15.sp,
-    titleColor: Color = BrandTheme.labelPrimary(appearance)
-) {
-    Row(
-        Modifier
-            .clickable(onClick = onToggle)
-            .testTag(testTag),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        if (icon != null) {
-            IconWell(
-                icon = icon,
-                appearance = appearance,
-                variant = variant,
-                size = 24.dp,
-                iconSize = 14.dp
-            )
-        }
-        Text(title, fontSize = titleFontSize, fontWeight = FontWeight.SemiBold, color = titleColor)
-        Spacer(Modifier.weight(1f))
-        Icon(
-            if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-            contentDescription = null,
-            tint = BrandTheme.labelSecondary(appearance),
-            modifier = Modifier.size(18.dp)
-        )
-    }
-}
-
-@Composable
-private fun BrandIcon(provider: DirectAIProvider) {
-    when (provider) {
-        DirectAIProvider.OPEN_AI -> Image(
-            painter = painterResource(R.drawable.brand_chatgpt),
-            contentDescription = provider.title,
-            modifier = Modifier
-                .size(32.dp)
-                .clip(RoundedCornerShape(7.dp))
-        )
-        DirectAIProvider.GEMINI -> Image(
-            painter = painterResource(R.drawable.brand_gemini),
-            contentDescription = provider.title,
-            modifier = Modifier
-                .size(32.dp)
-                .clip(RoundedCornerShape(7.dp))
-        )
-        DirectAIProvider.CLAUDE -> Image(
-            painter = painterResource(R.drawable.brand_claude),
-            contentDescription = provider.title,
-            modifier = Modifier
-                .size(32.dp)
-                .clip(RoundedCornerShape(7.dp))
-        )
-        DirectAIProvider.GROK -> Box(
-            modifier = Modifier
-                .size(32.dp)
-                .background(Color.Black, RoundedCornerShape(7.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                "G",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-        }
-    }
-}
-
-// MARK: - 미디어 순서 편집
+// MARK: - 미디어 순서 편집기
 
 @Composable
 private fun MediaOrderEditor(viewModel: ComposerViewModel, state: ComposerUiState) {
+    val context = LocalContext.current
     val density = LocalDensity.current
-    val appearance = LocalAppAppearance.current
-    val itemSlotPx = with(density) { (104.dp + 10.dp).toPx() }
+    val itemSlotPx = with(density) { (104 + 10).dp.toPx() }
     var draggingId by remember { mutableStateOf<String?>(null) }
-    var dragOffset by remember { mutableFloatStateOf(0f) }
+    var dragOffset by remember { mutableStateOf(0f) }
 
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(if (appearance == AppAppearance.BK) Color(0xFFF1F3F6) else BrandTheme.canvas, RoundedCornerShape(14.dp))
-            .then(if (appearance == AppAppearance.BK) Modifier.border(BorderStroke(1.dp, Color(0xFFE2E6EC)), RoundedCornerShape(14.dp)) else Modifier)
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconWell(
-                icon = Icons.Filled.Tune,
-                appearance = appearance,
-                size = 20.dp,
-                iconSize = 12.dp
-            )
-            Spacer(Modifier.width(6.dp))
-            Text("길게 눌러 순서 변경", fontSize = 12.sp, color = BrandTheme.labelSecondary(appearance))
-        }
-
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
-            Modifier
-                .horizontalScroll(rememberScrollState())
-                .padding(vertical = 2.dp),
+            Modifier.horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             state.mediaItems.forEachIndexed { index, media ->
-                val isDragging = draggingId == media.id
                 Box(
-                    Modifier
-                        .graphicsLayer {
-                            if (isDragging) {
-                                translationX = dragOffset
-                                shadowElevation = 12f
-                            }
-                        }
+                    modifier = Modifier
+                        .then(
+                            if (draggingId == media.id) {
+                                Modifier
+                                    .graphicsLayer { translationX = dragOffset }
+                                    .shadow(8.dp, RoundedCornerShape(14.dp))
+                            } else Modifier
+                        )
                         .pointerInput(media.id) {
                             detectDragGesturesAfterLongPress(
                                 onDragStart = {
@@ -1506,308 +1660,6 @@ private fun saveImageToGallery(context: Context, bytes: ByteArray): Boolean {
     }
 }
 
-// MARK: - 미리보기 카드
-
-@Composable
-private fun PreviewColumn(viewModel: ComposerViewModel, state: ComposerUiState) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val appearance = LocalAppAppearance.current
-    val post = state.generatedPost
-    val candidates = viewModel.comparisonCandidates()
-    // 프로필이 바뀌면 조건 만료 배지가 즉시 갱신되도록 구독한다.
-    val profile by viewModel.profileStore.profile.collectAsStateWithLifecycle()
-    val draftIsCurrent = state.generatedSignature ==
-        DraftSignature(state.idea.trim(), profile.mood, profile.preferredLength, profile)
-
-    Column(
-        Modifier
-            .widthIn(max = 540.dp)
-            .fillMaxWidth()
-            .starCard(appearance)
-            .testTag("composer.previewCard"),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconWell(
-                icon = Icons.Outlined.Description,
-                appearance = appearance,
-                size = 24.dp,
-                iconSize = 14.dp
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("미리보기", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = BrandTheme.labelPrimary(appearance))
-            Spacer(Modifier.weight(1f))
-            val source = state.activeCaptionSource
-            if (source != null) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(
-                        sourceIcon(source),
-                        contentDescription = null,
-                        tint = BrandTheme.labelSecondary(appearance),
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(source.title, fontSize = 12.sp, color = BrandTheme.labelSecondary(appearance))
-                }
-            }
-        }
-
-        if (post != null) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (candidates.size > 1) {
-                    CandidateComparison(viewModel, state, candidates)
-                }
-
-                if (state.mediaItems.isNotEmpty() || state.isLoadingMedia) {
-                    MediaPreview(state.mediaItems, state.previewAspect.ratio, state.isLoadingMedia)
-                }
-
-                if (!draftIsCurrent) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(
-                            Icons.Filled.Refresh,
-                            contentDescription = null,
-                            tint = BrandTheme.orange,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            "조건이 바뀌었어요. 다시 만들어 주세요.",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = BrandTheme.orange,
-                            modifier = Modifier.testTag("preview.stale")
-                        )
-                    }
-                }
-
-                val validation = viewModel.activeValidationReport()
-                if (validation != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Icon(
-                                if (validation.passesAllRules) Icons.Filled.Verified else Icons.Filled.Warning,
-                                contentDescription = null,
-                                tint = if (validation.passesAllRules) BrandTheme.green else BrandTheme.orange,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Text(
-                                if (validation.passesAllRules) "기준 통과" else "확인 필요",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (validation.passesAllRules) BrandTheme.green else BrandTheme.orange,
-                                modifier = Modifier.testTag("preview.validation")
-                            )
-                        }
-                        Spacer(Modifier.weight(1f))
-                        Text(
-                            "${post.characterCount} / ${validation.format.requiredCharacterCount}자",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = BrandTheme.labelPrimary(appearance),
-                            modifier = Modifier.testTag("preview.characterCount")
-                        )
-                    }
-
-                    if (!validation.passesAllRules) {
-                        Text(
-                            validation.failedRuleDescriptions.joinToString(" · "),
-                            fontSize = 11.sp,
-                            color = BrandTheme.orange,
-                            lineHeight = 15.sp
-                        )
-                    }
-                }
-
-                SelectionContainer {
-                    val resultShape = RoundedCornerShape(14.dp)
-                    val resultBorder = if (appearance == AppAppearance.BK) {
-                        BorderStroke(1.dp, Color(0xFFE2E6EC))
-                    } else {
-                        BorderStroke(1.dp, Color.White)
-                    }
-                    Text(
-                        post.composedText,
-                        fontSize = 17.sp,
-                        lineHeight = 24.sp,
-                        color = BrandTheme.labelPrimary(appearance),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .shadow(if (appearance == AppAppearance.BK) 4.dp else 12.dp, resultShape, ambientColor = BrandTheme.ink.copy(alpha = 0.08f), spotColor = BrandTheme.ink.copy(alpha = 0.08f))
-                            .background(if (appearance == AppAppearance.BK) BrandTheme.bkEnamelWhite else BrandTheme.resultSurface, resultShape)
-                            .border(resultBorder, resultShape)
-                            .padding(14.dp)
-                            .testTag("preview.text")
-                    )
-                }
-
-                // Instagram으로 공유 — 결과 화면의 단일 지배적 액션.
-                val shareEnabled = !state.isPreparingShare && !state.isGenerating
-                GlossyPrimaryButton(
-                    onClick = {
-                        scope.launch {
-                            val intent = viewModel.prepareShare(post, context)
-                            if (intent != null) {
-                                val chooser = Intent.createChooser(intent, null).apply {
-                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                }
-                                context.startActivity(chooser)
-                            }
-                        }
-                    },
-                    enabled = shareEnabled,
-                    appearance = appearance,
-                    modifier = Modifier.testTag("preview.share")
-                ) {
-                    if (state.isPreparingShare) {
-                        CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
-                    } else {
-                        Icon(Icons.Filled.Send, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text(
-                        if (state.isPreparingShare) "준비 중" else "Instagram으로 →",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
-                    )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(
-                        if (state.shareMessageIsError) Icons.Filled.Warning else Icons.Outlined.Info,
-                        contentDescription = null,
-                        tint = if (state.shareMessageIsError) BrandTheme.red else BrandTheme.labelSecondary(appearance),
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        state.shareMessage ?: "문구는 자동 복사됩니다",
-                        fontSize = 12.sp,
-                        color = if (state.shareMessageIsError) BrandTheme.red else BrandTheme.labelSecondary(appearance),
-                        modifier = Modifier.testTag("preview.shareMessage")
-                    )
-                }
-            }
-        } else {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Icon(
-                    Icons.Outlined.Description,
-                    contentDescription = null,
-                    tint = BrandTheme.labelSecondary(appearance),
-                    modifier = Modifier.size(16.dp)
-                )
-                Text(
-                    "게시물을 만들면 여기에 표시됩니다",
-                    fontSize = 15.sp,
-                    color = BrandTheme.labelSecondary(appearance),
-                    modifier = Modifier.testTag("preview.empty")
-                )
-            }
-        }
-    }
-}
-
-private fun sourceIcon(source: CaptionSource): ImageVector = when (source) {
-    CaptionSource.DEVICE -> Icons.Filled.Smartphone
-    CaptionSource.DETERMINISTIC -> Icons.Filled.Smartphone
-    CaptionSource.GEMINI -> Icons.Outlined.Diamond
-    CaptionSource.CHAT_GPT -> Icons.Filled.Forum
-    CaptionSource.CLAUDE -> Icons.Filled.AutoAwesome
-    CaptionSource.GROK -> Icons.Filled.Close
-}
-
-@Composable
-private fun CandidateComparison(
-    viewModel: ComposerViewModel,
-    state: ComposerUiState,
-    candidates: List<CaptionCandidate>
-) {
-    val appearance = LocalAppAppearance.current
-    val isBk = appearance == AppAppearance.BK
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconWell(
-                icon = Icons.Filled.AutoAwesome,
-                appearance = appearance,
-                size = 22.dp,
-                iconSize = 13.dp
-            )
-            Spacer(Modifier.width(6.dp))
-            Text("결과 비교", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = BrandTheme.labelPrimary(appearance))
-        }
-
-        Row(
-            Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            candidates.forEach { candidate ->
-                val report = viewModel.validationReport(candidate)
-                val selected = state.activeCaptionSource == candidate.source
-                val shape = RoundedCornerShape(14.dp)
-                val cardBg = if (isBk) {
-                    if (selected) Color.White else Color(0xFFF1F3F6)
-                } else {
-                    if (selected) BrandTheme.paper else BrandTheme.canvas
-                }
-                val cardBorder = if (selected) {
-                    BorderStroke(1.5.dp, BrandTheme.accent)
-                } else {
-                    BorderStroke(1.dp, if (isBk) Color(0xFFE2E6EC) else BrandTheme.labelSecondary.copy(alpha = 0.2f))
-                }
-
-                Column(
-                    Modifier
-                        .size(width = 220.dp, height = 112.dp)
-                        .border(cardBorder, shape)
-                        .background(cardBg, shape)
-                        .clickable { viewModel.useCandidate(candidate) }
-                        .padding(12.dp)
-                        .testTag("preview.candidate.${candidate.source.name}"),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            sourceIcon(candidate.source),
-                            contentDescription = null,
-                            tint = BrandTheme.labelPrimary(appearance),
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(candidate.source.title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = BrandTheme.labelPrimary(appearance))
-                        Spacer(Modifier.weight(1f))
-                        Icon(
-                            if (report.passesAllRules) Icons.Filled.Verified else Icons.Filled.Warning,
-                            contentDescription = null,
-                            tint = if (report.passesAllRules) BrandTheme.green else BrandTheme.orange,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                    Text(
-                        candidate.post.previewSnippet,
-                        fontSize = 12.sp,
-                        color = BrandTheme.labelSecondary(appearance),
-                        maxLines = 3,
-                        lineHeight = 15.sp
-                    )
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        "${candidate.post.characterCount}자 · ${if (report.passesAllRules) "통과" else "확인 필요"}",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (report.passesAllRules) BrandTheme.green else BrandTheme.orange
-                    )
-                }
-            }
-        }
-    }
-}
-
 @Composable
 private fun MediaPreview(items: List<ComposerMedia>, aspect: Float, isLoading: Boolean) {
     val appearance = LocalAppAppearance.current
@@ -1894,5 +1746,74 @@ private fun MediaPreview(items: List<ComposerMedia>, aspect: Float, isLoading: B
                 Text("불러오는 중", fontSize = 12.sp, color = BrandTheme.labelSecondary(appearance))
             }
         }
+    }
+}
+
+private fun sourceIcon(source: CaptionSource): ImageVector = when (source) {
+    CaptionSource.DEVICE -> Icons.Filled.Smartphone
+    CaptionSource.DETERMINISTIC -> Icons.Filled.Smartphone
+    CaptionSource.GEMINI -> Icons.Outlined.Diamond
+    CaptionSource.CHAT_GPT -> Icons.Filled.Forum
+    CaptionSource.CLAUDE -> Icons.Filled.AutoAwesome
+    CaptionSource.GROK -> Icons.Filled.Close
+}
+
+@Composable
+private fun AIChoiceCard(
+    choice: AIChoice,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    appearance: AppAppearance = LocalAppAppearance.current
+) {
+    val isBk = appearance == AppAppearance.BK
+    val shape = RoundedCornerShape(if (isBk) 14.dp else 12.dp)
+    val bg = if (isBk) {
+        if (enabled) Color.White else Color(0xFFF6F7F9)
+    } else {
+        if (enabled) BrandTheme.paper else BrandTheme.canvas
+    }
+    val border = BorderStroke(
+        1.dp,
+        if (isBk) {
+            if (enabled) Color(0xFFD8DCE3) else Color(0xFFE5E8EE)
+        } else {
+            BrandTheme.border
+        }
+    )
+
+    Column(
+        modifier = modifier
+            .heightIn(min = 60.dp)
+            .border(border, shape)
+            .background(bg, shape)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        IconWell(
+            icon = choiceIcon(choice),
+            appearance = appearance,
+            variant = if (isBk) IconWellVariant.CARBON else IconWellVariant.CARBON,
+            size = 28.dp,
+            iconSize = 16.dp
+        )
+        Text(
+            choice.title,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (enabled) BrandTheme.labelPrimary(appearance) else BrandTheme.labelSecondary(appearance)
+        )
+    }
+}
+
+private fun choiceIcon(choice: AIChoice): ImageVector = when (choice) {
+    AIChoice.OnDevice -> Icons.Filled.Smartphone
+    is AIChoice.External -> when (choice.provider) {
+        DirectAIProvider.GEMINI -> Icons.Outlined.Diamond
+        DirectAIProvider.OPEN_AI -> Icons.Filled.Forum
+        DirectAIProvider.CLAUDE -> Icons.Filled.AutoAwesome
+        DirectAIProvider.GROK -> Icons.Filled.Close
     }
 }

@@ -3,7 +3,7 @@ product_id: "starmanager"
 
 reference_inventory:
   member: "ios"
-  revision: "2.0.1"
+  revision: "2.3.0"
   scanned_roots:
     - "StarManager"
   uncovered_source_refs: []
@@ -220,7 +220,7 @@ capabilities:
       - "composer_posting_handoff_guards"
 
   - id: "simplified_preferences_and_settings_order"
-    purpose: "Unified Settings screen layout matching the exact 8-section top-to-bottom iPhone contract with simplified preference fields and exact section footers, removing obsolete tone sliders and topic/audience fields while maintaining model persistence."
+    purpose: "Personal, transparent writing preferences without owner-specific prose or preset shortcuts. Every instruction sent to AI is visible and editable in one settings surface."
     source_refs:
       - file: "StarManager/Features/Settings/ProfileSettingsView.swift"
         description: "iPhone Settings view top-to-bottom contract with simplified preferences"
@@ -229,56 +229,58 @@ capabilities:
     preconditions:
       - "CreatorProfileStore initialized"
     inputs:
-      - "User preferences (voice, emoji toggle, style preset, mood, length, character count, extra instructions, prohibited phrases, hashtags, external AI browser visibility, theme)"
-    normal_result: "Unified settings displayed and persisted in order: 내 프리셋, 기본 설정, 글쓰기 취향, 추가 옵션, 프리셋 보관, 외부 AI 로그인 관리, 앱 업데이트, 테마 관리."
+      - "User preferences (audience age, mood, destination, original-text reflection, emoji intensity, length, character count, detailed writing criteria, prohibited phrases, hashtags, external AI browser visibility, theme)"
+    normal_result: "Settings persist neutral per-person writing preferences. Owner-authored defaults, the three '내 프리셋' cards, preset save/apply controls, and the separate tone field are absent."
     states:
       IDLE: "Viewing and editing settings"
     algorithms_and_thresholds:
-      - "Slider character count: 50..500 step 10"
-      - "Additional instructions field: 1..3 lines"
+      - "Destination maximums: Instagram 2200, KakaoTalk 200, X standard 280 characters"
+      - "Emoji intensity: none, restrained, active, excessive"
+      - "Original-text reflection is presented with plain-language choices instead of the ambiguous '이야기 비중' label"
     data_contracts:
       CreatorProfile:
-        voice: "String"
-        usesEmoji: "Boolean"
+        audienceAgeGroup: "AudienceAgeGroup"
+        destination: "PostDestination"
+        emojiIntensity: "EmojiIntensity"
         mood: "PostMood"
         preferredLength: "PostLength"
         controls: "GenerationControls"
-        additionalInstructions: "String?"
+        additionalInstructions: "String?; shown as 상세 작성 기준"
         prohibitedPhrases: "String"
         hashtagStyle: "String"
       showsExternalAIBrowser: "Boolean, defaults false and is stored separately from CreatorProfile JSON"
     producer_consumer_routes:
       - "ProfileSettingsScreen consumes and mutates CreatorProfileStore StateFlow"
     persistence_relaunch:
-      - "SharedPreferences / JSON storage via CreatorProfileStore; showsExternalAIBrowser stored as 0/1 and defaults to 0"
+      - "SharedPreferences / JSON storage via CreatorProfileStore; exact legacy owner defaults migrate once to neutral values while user-authored values remain intact"
     permissions_privacy_security:
       - "Local device storage only"
     background_lifecycle:
       - "StateFlow lifecycle observation via collectAsStateWithLifecycle"
     gestures_accessibility:
-      - "Segmented controls, switches, sliders, text fields, and preset action icons with clear testTags and semantics"
+      - "Segmented controls, sliders, and text fields with clear labels and semantics"
     supported_devices_layouts:
-      - "Content max width 760dp, responsive single/multi-column style presets"
+      - "Content max width 760dp with responsive controls"
     visual_reference:
       - "Settings sections with icon wells, rounded cards, custom dividers, and explicit footers"
     platform_adaptations:
       ios:
-        status: "reference_verified"
-        description: "Native SwiftUI SettingsView"
+        status: "implemented_source_only"
+        description: "Native SwiftUI settings source implements the neutral, destination-aware preference contract"
       android:
         status: "implemented_source_only"
-        description: "Previously rendered on Samsung SM-F968N with all 8 sections in order; the new persisted browser visibility switch is implemented in source but not yet runtime verified"
+        description: "Android implementation must match the same neutral, destination-aware preference contract"
     intentional_differences:
-      section_placement: "앱 업데이트 and 테마 관리 placed at bottom as requested"
+      platform_controls: "Native SwiftUI and Compose controls may differ while labels, choices, order, and persistence remain equivalent"
     implementations:
       ios:
-        status: "reference_verified"
+        status: "implemented_source_only"
         entry_file: "StarManager/Features/Settings/ProfileSettingsView.swift"
-        verification: "reference_verified"
+        verification: "iPhone device build, replacement install, and launch passed"
       android:
         status: "implemented_source_only"
         entry_file: "app/src/main/java/com/armsone/starmanager/ui/settings/ProfileSettingsScreen.kt"
-        verification: "Prior settings surface had 65 unit tests, debug build, lint, and runtime section-order evidence; new browser visibility option has only an authored persistence test and source inspection pending fresh execution"
+        verification: "76 JVM tests, assembleDebug, replacement install, launch, and settings/composer captures passed on SM-F968N"
     dependencies:
       - "androidx.compose.material3"
       - "com.armsone.starmanager.model.CreatorProfileStore"
@@ -286,6 +288,9 @@ capabilities:
       - "settings_section_order_parity"
       - "settings_simplified_preferences_surface"
       - "settings_external_ai_browser_visibility"
+      - "settings_personal_writing_preferences"
+      - "settings_destination_character_guidance"
+      - "settings_no_default_presets"
 
   - id: "external_ai_login_session_reuse"
     purpose: "Truthful per-provider login state and dedicated in-app browser management for Gemini, ChatGPT, and Claude, with persistent web sessions shared between settings and composer."
@@ -455,8 +460,79 @@ capabilities:
       - "composer_scroll_keyboard_dismissal"
       - "external_ai_answer_cleaner_parity"
 
+  - id: "unified_media_first_composer"
+    purpose: "One media-first composer supports photo-only, photo-and-text, or text-only drafting; AI assistance updates the same editable text field instead of opening a separate preview panel."
+    source_refs:
+      - file: "StarManager/Features/Composer/ComposerView.swift"
+        description: "Current iPhone unified composer and optional representative-photo external AI handoff"
+    entry_points:
+      - "ComposerScreen"
+    preconditions:
+      - "At least one image or nonblank text is present before AI generation"
+    inputs:
+      - "Zero to eight media items"
+      - "Optional editable draft text"
+      - "Selected external provider or on-device AI"
+    normal_result: "Media is selected or captured before or alongside writing; a generated answer replaces the same editable draft field and remains editable. External AI receives the first image when one exists; videos are never sent to AI."
+    states:
+      EMPTY: "No media and no text; generation disabled"
+      MEDIA_ONLY: "Representative first image plus an explicit request to write from the image"
+      MEDIA_AND_TEXT: "Representative first image plus the user's draft and visible writing preferences"
+      TEXT_ONLY: "Draft text plus visible writing preferences"
+      GENERATED_EDITABLE: "AI answer has returned to the same editable text field"
+    algorithms_and_thresholds:
+      - "Representative media is the first image in user-defined order; video entries are skipped"
+      - "On-device generation remains text-only and clearly requires text"
+      - "External provider attachment capability is positively confirmed; failure opens visible recovery instead of silently dropping the photo"
+    data_contracts:
+      representativeImage: "Optional bytes and MIME type derived from the first image item"
+      composerText: "Single editable source of truth before and after generation"
+    producer_consumer_routes:
+      - "Photo picker or camera -> ComposerViewModel mediaItems -> composer media editor"
+      - "Composer text/media -> external AI request -> same composer text field"
+      - "Composer text -> on-device generator -> same composer text field"
+    persistence_relaunch:
+      - "Composer draft remains transient; profile preferences persist locally"
+    permissions_privacy_security:
+      - "Only the representative image is handed to the selected provider after the user invokes it"
+      - "No video is handed to AI"
+    background_lifecycle:
+      - "Cancel or reset destroys the pending browser task without clearing unrelated local media"
+    gestures_accessibility:
+      - "Media actions precede the text editor and all generation actions have visible disabled/loading states"
+    supported_devices_layouts:
+      - "Compact phone and regular-width adaptive layouts"
+    visual_reference:
+      - "A single composer panel with media controls, editable story text, AI choices, and share action"
+    platform_adaptations:
+      ios:
+        status: "build_verified_runtime_provider_pending"
+        description: "SwiftUI composer and WKWebView bridge built, installed, and launched on iPhone; live authenticated provider image-upload trace remains pending"
+      android:
+        status: "implemented_runtime_provider_pending"
+        description: "Compose composer and Android WebView bridge implement the same observable states; live authenticated provider image-upload trace remains pending"
+    intentional_differences:
+      file_bridge: "iOS uses WKWebView JavaScript evaluation; Android uses WebView JavaScript evaluation and native byte transport"
+    implementations:
+      ios:
+        status: "build_verified_runtime_provider_pending"
+        entry_file: "StarManager/Features/Composer/ComposerView.swift"
+        verification: "iPhone device build, replacement install, and launch passed; live provider photo attachment remains pending"
+      android:
+        status: "build_verified_runtime_provider_pending"
+        entry_file: "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt"
+        verification: "76 JVM tests, assembleDebug, replacement install, launch, and composer/settings captures passed on SM-F968N; live provider photo attachment remains pending"
+    dependencies:
+      - "Native photo picker and camera"
+      - "AIBI provider profiles"
+    parity_row_ids:
+      - "composer_unified_media_first_flow"
+      - "composer_ai_input_modes"
+      - "composer_representative_photo_handoff"
+      - "composer_same_field_ai_return"
+
   - id: "compact_generation_prompt"
-    purpose: "Compact generation prompt parity generating [내가 입력한 내용], [원하는 결과], strict Korean bullet rules, and conditional [추가 요청]."
+    purpose: "Transparent, destination-aware generation prompt assembled only from the user's current content and visible preferences."
     source_refs:
       - file: "StarManager/Models/CreatorProfile.swift"
         description: "generationPrompt assembly logic"
@@ -467,20 +543,20 @@ capabilities:
     preconditions:
       - "CreatorProfile and user idea"
     inputs:
-      - "idea, mood, length, profile settings"
+      - "optional text, optional representative photo, mood, destination, audience age, original-text reflection, emoji intensity, length, and visible profile settings"
     normal_result: "Structured compact Korean prompt string ready for external AI web automation or clipboard copy."
     states:
       READY: "Prompt generated synchronously"
     algorithms_and_thresholds:
-      - "Exact character count bullet"
+      - "Destination and exact character target bullets"
       - "Two consecutive Korean hashtags bullet"
-      - "Mood, voice, story weight instruction bullet"
+      - "Mood, audience age, and plain-language original-text reflection bullets"
       - "Sentence linebreak bullet"
-      - "Restrained emoji policy bullet"
-      - "Emoji-wrapped summary line bullet"
+      - "Selected four-level emoji policy bullet"
       - "Prohibited phrases bullet (if nonempty)"
       - "Hashtag style bullet (if nonempty)"
-      - "[추가 요청] section (appended only if trimmed additional instructions nonempty)"
+      - "[상세 작성 기준] section (appended only if the visible field is nonempty)"
+      - "No hidden owner-specific writing rules or personal phrase is appended"
     data_contracts:
       generationPrompt: "String"
     producer_consumer_routes:

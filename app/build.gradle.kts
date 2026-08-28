@@ -11,9 +11,9 @@ android {
         applicationId = "com.armsone.starmanager"
         minSdk = 26
         targetSdk = 37
-        versionCode = 344879
-        versionName = "2.2.1"
-        buildConfigField("String", "BUILD_NUMBER", "\"202608281159\"")
+        versionCode = 345218
+        versionName = "2.3.0"
+        buildConfigField("String", "BUILD_NUMBER", "\"202608281738\"")
     }
 
     buildTypes {
