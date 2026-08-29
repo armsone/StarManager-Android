@@ -1,13 +1,15 @@
-# StarManager — Android
+# iManagerAI — Android
 
-iOS SwiftUI 앱 `/StarManager`의 도달 가능한 두 탭(**만들기**, **내 설정**)을 충실히 이식한
+iOS SwiftUI 앱 `/iManagerAI`의 도달 가능한 두 탭(**만들기**, **내 설정**)을 충실히 이식한
 단일 모듈 Kotlin/Jetpack Compose 앱입니다.
 
-- applicationId: `com.armsone.starmanager` · minSdk 26 · target/compileSdk 37 · Java/Kotlin 17
+- applicationId: `com.armsone.starmanager` (기존 설치 앱 연속성 유지) · namespace: `com.armsone.imanagerai` · minSdk 26 · target/compileSdk 37 · Java/Kotlin 17
+- Gradle 루트 프로젝트: `iManagerAI-Android`
 - 앱 버전: `2.5.1` · versionCode `346666` · 표시 빌드 `202608291746`
 - 폰/태블릿 지원, 화면 회전 잠금 없음, 라이트 테마 강제(iOS `preferredColorScheme(.light)` 대응)
-- 설정에서 GitHub Releases의 서명 APK 업데이트를 자동 또는 수동으로 확인·다운로드하고 시스템 설치자로 넘깁니다.
+- 설정에서 GitHub Releases의 서명 APK 업데이트를 자동 또는 수동으로 확인·다운로드하고 시스템 설치자로 넘깁니다 (`iManagerAI-Android` 기본, `iManager-Android` 및 이전 `StarManager-Android` 릴리스 호환).
 - 자동화는 기본으로 꺼져 있으며 사용자가 설정에서 켜면 앱 실행·15초 복귀 시 사진 선택부터 AI 전달까지 이어집니다. 외부 사진 공유와 카메라 바로가기는 이 설정과 무관하게 사용할 수 있습니다.
+- 딥링크 지원: `imanagerai://` (기본), `imanager://` 및 `starmanager://` (하위 호환)
 - iOS의 아카이브(README 전용)와 도달 불가능한 레거시 백엔드/Image Playground 표면은 이식하지 않음
 
 ## 빌드
@@ -26,11 +28,11 @@ Gradle wrapper 9.5가 포함되어 있습니다.
 원본을 다시 동기화하려면 다음을 실행하세요.
 
 ```sh
-sh scripts/copy-ios-assets.sh ../StarManager
+sh scripts/copy-ios-assets.sh ../iManagerAI
 ```
 
 - 앱이 `brand_chatgpt`/`brand_gemini`/`brand_grok` drawable을 직접 표시합니다.
-- 런처 아이콘도 iOS 원본 `starmanager_app_icon.png`를 사용합니다.
+- 런처 아이콘도 iOS 원본 `imanagerai_app_icon.png`를 사용합니다.
 
 ## 충실도 메모 (iOS 원본 사실)
 
@@ -56,9 +58,9 @@ sh scripts/copy-ios-assets.sh ../StarManager
 릴리스 동작에 영향 없이 디버그 빌드에서만 인텐트 엑스트라로 활성화됩니다.
 
 ```sh
-adb shell am start -n com.armsone.starmanager/.MainActivity \
-  --ez starmanager.fixture.zeroDelay true \
-  --ez starmanager.fixture.resetState true
+adb shell am start -n com.armsone.starmanager/com.armsone.imanagerai.MainActivity \
+  --ez imanagerai.fixture.zeroDelay true \
+  --ez imanagerai.fixture.resetState true
 ```
 
 주요 컴포저블에는 `composer.*` / `preview.*` / `settings.*` / `tab.*` testTag가 있습니다.

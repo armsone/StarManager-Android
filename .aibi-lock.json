@@ -1,52 +1,52 @@
 {
   "schemaVersion": 1,
   "repositories": {
-    "starmanager-android": {
-      "version": "0.4.3",
+    "imanagerai-android": {
+      "version": "0.4.4",
       "files": {
-        "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAINativeFileBridge.kt": {
-          "sha256": "7f480d2a7823f9dc5ee2ba163d6fed94d031217a176938e51a993e7c24bd32dc",
-          "source": "profiles/starmanager/distribution/android/ExternalAINativeFileBridge.kt"
+        "app/src/main/java/com/armsone/imanagerai/ui/externalai/ExternalAINativeFileBridge.kt": {
+          "sha256": "802dda0ddd7e88bb219750542c9afcc7199ba3faa7b63b0f895545cb2a0442fd",
+          "source": "profiles/imanagerai/distribution/android/ExternalAINativeFileBridge.kt"
         },
-        "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAIMediaPipeline.kt": {
-          "sha256": "49fb2c378b06afcdd8a7ca1a38370d12a5c14247b3978904e93e58b2387ac07f",
-          "source": "profiles/starmanager/distribution/android/ExternalAIMediaPipeline.kt"
+        "app/src/main/java/com/armsone/imanagerai/ui/externalai/ExternalAIMediaPipeline.kt": {
+          "sha256": "0bced2255cd492f59bac54ef6bd6d37d6170b1d25fbc67737a91fb314772c55c",
+          "source": "profiles/imanagerai/distribution/android/ExternalAIMediaPipeline.kt"
         },
-        "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAIModels.kt": {
-          "sha256": "424bef31f5c3ee8c2e5a1f18cb297d164f0ad56fccf3d38a618e614a6bdeb18d",
-          "source": "profiles/starmanager/distribution/android/ExternalAIModels.kt"
+        "app/src/main/java/com/armsone/imanagerai/ui/externalai/ExternalAIModels.kt": {
+          "sha256": "d4b389a603f3d664fc4147c509e70ad7bb67375b2a392bb41abef0be2c48e4c5",
+          "source": "profiles/imanagerai/distribution/android/ExternalAIModels.kt"
         },
-        "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAIScripts.kt": {
-          "sha256": "5d40494d4e180de9a4d5e7de7d4c9a16ec14d0ed2b1d2b4c81be2fc5add346f6",
-          "source": "profiles/starmanager/distribution/android/ExternalAIScripts.kt"
+        "app/src/main/java/com/armsone/imanagerai/ui/externalai/ExternalAIScripts.kt": {
+          "sha256": "90cb22aa242537e507b50ed1e2abb9c7cf3628cbb954c45026360710a63cf742",
+          "source": "profiles/imanagerai/distribution/android/ExternalAIScripts.kt"
         },
-        "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAISecurityPolicy.kt": {
-          "sha256": "8689c99c4335b23ad626011c4f60152d087b088c9bcbe4d898a3e038043a5ce9",
-          "source": "profiles/starmanager/distribution/android/ExternalAISecurityPolicy.kt"
+        "app/src/main/java/com/armsone/imanagerai/ui/externalai/ExternalAISecurityPolicy.kt": {
+          "sha256": "c2753ef5b98859ddc46669e7873ba9f83601523478317ca675bc88f56863e498",
+          "source": "profiles/imanagerai/distribution/android/ExternalAISecurityPolicy.kt"
         },
-        "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAIAnswerCleaner.kt": {
-          "sha256": "d029d1f2292cdbfe3c42f170027fac4d1f767964c3c851ba1be500f5f2882b8d",
-          "source": "profiles/starmanager/distribution/android/ExternalAIAnswerCleaner.kt"
+        "app/src/main/java/com/armsone/imanagerai/ui/externalai/ExternalAIAnswerCleaner.kt": {
+          "sha256": "71fd102a76c464bd8fe2ecdd000a941129f81cc8c5b15c56781f5195303b8c53",
+          "source": "profiles/imanagerai/distribution/android/ExternalAIAnswerCleaner.kt"
         },
-        "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAIErrorSanitizer.kt": {
-          "sha256": "c22202d4ad8daee7d5fe38dd50f2832ba1675cd453dfc80caf512faf9bc34f69",
-          "source": "profiles/starmanager/distribution/android/ExternalAIErrorSanitizer.kt"
+        "app/src/main/java/com/armsone/imanagerai/ui/externalai/ExternalAIErrorSanitizer.kt": {
+          "sha256": "449ed60b65cd701e8bfc854603dddb5edaadcff8565e2c219012654e99c6311f",
+          "source": "profiles/imanagerai/distribution/android/ExternalAIErrorSanitizer.kt"
         },
-        "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAIFallbackClassifier.kt": {
-          "sha256": "7fa9f1b9044be82faca43f50a49b19597bbf0f30d4107f641278825eb2e43f0b",
-          "source": "profiles/starmanager/distribution/android/ExternalAIFallbackClassifier.kt"
+        "app/src/main/java/com/armsone/imanagerai/ui/externalai/ExternalAIFallbackClassifier.kt": {
+          "sha256": "742e6d6d7ee2110f6c3c490148f9a191b4e34280bb7de8c6d1996da3b6cc7324",
+          "source": "profiles/imanagerai/distribution/android/ExternalAIFallbackClassifier.kt"
         },
-        "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAITimerFormatter.kt": {
-          "sha256": "571a86318777664d8f9cce4ba730cab1327de5665ba8dbbca47808086e768035",
-          "source": "profiles/starmanager/distribution/android/ExternalAITimerFormatter.kt"
+        "app/src/main/java/com/armsone/imanagerai/ui/externalai/ExternalAITimerFormatter.kt": {
+          "sha256": "f4b5af3bb3f21326219cea1d02fc56149f1120c0f397f2795cbc88c32f388c9f",
+          "source": "profiles/imanagerai/distribution/android/ExternalAITimerFormatter.kt"
         },
-        "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAIAuthStatus.kt": {
-          "sha256": "aaf1a14907df7ee13763dda76e7c66b291fb4b39997437adc33a8de550772efe",
-          "source": "profiles/starmanager/distribution/android/ExternalAIAuthStatus.kt"
+        "app/src/main/java/com/armsone/imanagerai/ui/externalai/ExternalAIAuthStatus.kt": {
+          "sha256": "12e5b5ff29832e51c6637d32c54fa706e419fce09b47e7f79cf7a23cd14b3694",
+          "source": "profiles/imanagerai/distribution/android/ExternalAIAuthStatus.kt"
         }
       }
     }
   },
-  "consumer": "starmanager",
-  "aibiVersion": "0.4.3"
+  "consumer": "imanagerai",
+  "aibiVersion": "0.4.4"
 }

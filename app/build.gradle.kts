@@ -4,16 +4,16 @@ plugins {
 }
 
 android {
-    namespace = "com.armsone.starmanager"
+    namespace = "com.armsone.imanagerai"
     compileSdk = 37
 
     defaultConfig {
         applicationId = "com.armsone.starmanager"
         minSdk = 26
         targetSdk = 37
-        versionCode = 346666
-        versionName = "2.5.1"
-        buildConfigField("String", "BUILD_NUMBER", "\"202608291746\"")
+        versionCode = 346907
+        versionName = "2.6.0"
+        buildConfigField("String", "BUILD_NUMBER", "\"202608292118\"")
     }
 
     buildTypes {

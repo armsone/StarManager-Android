@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- iOS INFOPLIST_KEY_CFBundleDisplayName = StarManager -->
-    <string name="app_name">StarManager</string>
+    <!-- iOS INFOPLIST_KEY_CFBundleDisplayName = iManagerAI -->
+    <string name="app_name">iManagerAI</string>
     <string name="shortcut_camera">카메라</string>
     <string name="theme_interstellar">인터스텔라</string>
 </resources>

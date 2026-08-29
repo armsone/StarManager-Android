@@ -9,9 +9,9 @@
       "fixture": "fresh composer with no media",
       "classification": "visual",
       "status": "matched",
-      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Composer/ComposerView.swift#heroCopy" },
+      "source_ref": { "kind": "source", "value": "../iManager/iManager/Features/Composer/ComposerView.swift#heroCopy" },
       "target_observation": "Android uses the iOS title2-equivalent 22sp bold title.",
-      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt#ComposerScreen",
+      "implementation_ref": "app/src/main/java/com/armsone/imanagerai/ui/composer/ComposerScreen.kt#ComposerScreen",
       "evidence": [{ "id": "collapsed_pair", "type": "capture_pair", "path": ".parity/evidence/2026-08-28/composer-collapsed-pair.json", "sha256": "3d3bb832dd5140047cac0702abcf664c148be740b2d50059b4e729f6fa84ff6e", "post_change": true }],
       "attempts": [{ "attempt": 1, "date": "2026-08-28", "action": "Aligned Android hero typography to iOS.", "result": "Paired device captures show the same hierarchy." }]
     },
@@ -23,9 +23,9 @@
       "fixture": "fresh composer with no media",
       "classification": "visual",
       "status": "matched",
-      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Composer/ComposerView.swift#ComposerToolButtonStyle" },
+      "source_ref": { "kind": "source", "value": "../iManager/iManager/Features/Composer/ComposerView.swift#ComposerToolButtonStyle" },
       "target_observation": "Android media actions match the iOS geometry and visual weight.",
-      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt#BorderedActionButton",
+      "implementation_ref": "app/src/main/java/com/armsone/imanagerai/ui/composer/ComposerScreen.kt#BorderedActionButton",
       "evidence": [{ "id": "collapsed_pair", "type": "capture_pair", "path": ".parity/evidence/2026-08-28/composer-collapsed-pair.json", "sha256": "3d3bb832dd5140047cac0702abcf664c148be740b2d50059b4e729f6fa84ff6e", "post_change": true }],
       "attempts": [{ "attempt": 1, "date": "2026-08-28", "action": "Applied iOS media-button height and radius to Android.", "result": "Paired device captures confirm the aligned button proportions." }]
     },
@@ -37,9 +37,9 @@
       "fixture": "fresh composer with empty story",
       "classification": "visual",
       "status": "matched",
-      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Composer/ComposerView.swift#mediaAndWritingCard" },
+      "source_ref": { "kind": "source", "value": "../iManager/iManager/Features/Composer/ComposerView.swift#mediaAndWritingCard" },
       "target_observation": "Android story input now uses the iOS body-size equivalent.",
-      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt#IdeaField",
+      "implementation_ref": "app/src/main/java/com/armsone/imanagerai/ui/composer/ComposerScreen.kt#IdeaField",
       "evidence": [{ "id": "collapsed_pair", "type": "capture_pair", "path": ".parity/evidence/2026-08-28/composer-collapsed-pair.json", "sha256": "3d3bb832dd5140047cac0702abcf664c148be740b2d50059b4e729f6fa84ff6e", "post_change": true }],
       "attempts": [{ "attempt": 1, "date": "2026-08-28", "action": "Raised Android idea typography from 16sp to 17sp.", "result": "Paired device captures show matching text prominence." }]
     },
@@ -51,9 +51,9 @@
       "fixture": "fresh composer with no generation input",
       "classification": "visual",
       "status": "matched",
-      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Composer/ComposerView.swift#aiChoiceButtons" },
+      "source_ref": { "kind": "source", "value": "../iManager/iManager/Features/Composer/ComposerView.swift#aiChoiceButtons" },
       "target_observation": "Android renders four compact provider cards in one row and labels the device provider AI.",
-      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt#AIChoiceCard",
+      "implementation_ref": "app/src/main/java/com/armsone/imanagerai/ui/composer/ComposerScreen.kt#AIChoiceCard",
       "evidence": [{ "id": "collapsed_pair", "type": "capture_pair", "path": ".parity/evidence/2026-08-28/composer-collapsed-pair.json", "sha256": "3d3bb832dd5140047cac0702abcf664c148be740b2d50059b4e729f6fa84ff6e", "post_change": true }],
       "attempts": [{ "attempt": 1, "date": "2026-08-28", "action": "Matched Android provider cards to the iPhone compact layout and AI label.", "result": "Paired captures show Gemini, ChatGPT, Claude, and AI in one row." }]
     },
@@ -65,9 +65,9 @@
       "fixture": "launch composer, tap writing style header once",
       "classification": "functional",
       "status": "matched",
-      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Composer/ComposerView.swift#writingSettingsCard" },
+      "source_ref": { "kind": "source", "value": "../iManager/iManager/Features/Composer/ComposerView.swift#writingSettingsCard" },
       "target_observation": "Both installed apps launch with the panel collapsed and reveal the controls after one header tap.",
-      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt#WritingSettingsCard",
+      "implementation_ref": "app/src/main/java/com/armsone/imanagerai/ui/composer/ComposerScreen.kt#WritingSettingsCard",
       "evidence": [{ "id": "toggle_trace", "type": "behavior_trace", "path": ".parity/evidence/2026-08-28/writing-settings-toggle.json", "sha256": "eb27ef827b08f505fa018ebc953e304fc662182fdf701887502a8540497b07b0" }],
       "attempts": [{ "attempt": 1, "date": "2026-08-28", "action": "Added collapsed-by-default state and a tappable header on both platforms.", "result": "Device interaction trace passed on iPhone and Android." }]
     },
@@ -81,7 +81,7 @@
       "status": "matched",
       "source_ref": { "kind": "spec", "value": "SCR-20260828-sgpe.png sha256:5328ed80eb323902c6013f631b1017953261e7cac7fff9e1f8061000b44dd8c8" },
       "target_observation": "iPhone additional-instructions body is reduced to the Android 13sp size.",
-      "implementation_ref": "../StarManager/StarManager/Features/Composer/ComposerView.swift#writingSettingsCard",
+      "implementation_ref": "../iManager/iManager/Features/Composer/ComposerView.swift#writingSettingsCard",
       "evidence": [{ "id": "expanded_pair", "type": "capture_pair", "path": ".parity/evidence/2026-08-28/guidelines-expanded-pair.json", "sha256": "e43617d977c14a3e3595aa7f05937e377ab9af2f48864240f058ccd74256c803", "post_change": true }],
       "attempts": [{ "attempt": 1, "date": "2026-08-28", "action": "Set the iPhone detailed-guidelines field to 13pt.", "result": "Expanded paired captures confirm comparable body size." }]
     },
@@ -95,7 +95,7 @@
       "status": "matched",
       "source_ref": { "kind": "runtime", "value": "iPhone Gemini, ChatGPT, and Claude live paths confirmed by user on 2026-08-28" },
       "target_observation": "ADB-selected five-photo run delivered five ordered FileProvider URIs through MODE_OPEN_MULTIPLE, exposed five semantic attachment controls, submitted only after the exact-count gate, and entered provider generation without an app crash.",
-      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAISurface.kt#attachOrderedPhotosToProvider",
+      "implementation_ref": "app/src/main/java/com/armsone/imanagerai/ui/externalai/ExternalAISurface.kt#attachOrderedPhotosToProvider",
       "fallback_capable": false,
       "evidence": [
         { "id": "gemini_five_photo_handoff", "type": "behavior_trace", "path": ".parity/evidence/2026-08-29/gemini-five-photo-handoff.json", "sha256": "e5c04b377315d0b5e0f642eabc9dba19daa23b89604215300321b703b56b1c00", "post_change": true }
@@ -119,9 +119,9 @@
       "fixture": "mixed_ordered_media_with_images_and_videos",
       "classification": "functional",
       "status": "needs_verification",
-      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Composer/ComposerView.swift#activePhotoAttachments" },
+      "source_ref": { "kind": "source", "value": "../iManager/iManager/Features/Composer/ComposerView.swift#activePhotoAttachments" },
       "target_observation": "Android filters MediaKind.IMAGE before normalization; mixed-media device trace pending.",
-      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerViewModel.kt#makeSelectedPhotoAttachments",
+      "implementation_ref": "app/src/main/java/com/armsone/imanagerai/ui/composer/ComposerViewModel.kt#makeSelectedPhotoAttachments",
       "fallback_capable": false,
       "evidence": [],
       "attempts": [{ "attempt": 1, "date": "2026-08-28", "action": "Changed Android external-AI media snapshot from the first image to the ordered list of all image items.", "result": "Source and build verification passed; mixed-media behavior trace pending." }]
@@ -134,9 +134,9 @@
       "fixture": "provider_attachment_input_forced_to_fail",
       "classification": "functional",
       "status": "needs_verification",
-      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Composer/ExternalAIBrowserView.swift#attachmentFallbackBanner" },
+      "source_ref": { "kind": "source", "value": "../iManager/iManager/Features/Composer/ExternalAIBrowserView.swift#attachmentFallbackBanner" },
       "target_observation": "Android fallback source displays the selected count; negative live provider trace pending.",
-      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAISurface.kt#ExternalAISurface",
+      "implementation_ref": "app/src/main/java/com/armsone/imanagerai/ui/externalai/ExternalAISurface.kt#ExternalAISurface",
       "fallback_capable": true,
       "evidence": [],
       "attempts": [
@@ -152,9 +152,9 @@
       "fixture": "portrait_jpeg_with_exif_rotation",
       "classification": "functional",
       "status": "needs_verification",
-      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Composer/ComposerView.swift#mediaEditor" },
+      "source_ref": { "kind": "source", "value": "../iManager/iManager/Features/Composer/ComposerView.swift#mediaEditor" },
       "target_observation": "User observed a portrait photo rendered sideways before the fix; the installed Android build now applies EXIF orientation before storage and bounded display decode.",
-      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerImagePipeline.kt",
+      "implementation_ref": "app/src/main/java/com/armsone/imanagerai/ui/composer/ComposerImagePipeline.kt",
       "fallback_capable": false,
       "evidence": [],
       "attempts": [
@@ -169,9 +169,9 @@
       "fixture": "ordered_eight_high_resolution_photos",
       "classification": "functional",
       "status": "needs_verification",
-      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Composer/ComposerView.swift#mediaEditor" },
+      "source_ref": { "kind": "source", "value": "../iManager/iManager/Features/Composer/ComposerView.swift#mediaEditor" },
       "target_observation": "User observed severe phone slowdown before the fix; the installed build performs sequential ingestion off the main thread, 320px RGB_565 thumbnails, and a 1400px bounded main preview.",
-      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt#rememberMediaBitmap",
+      "implementation_ref": "app/src/main/java/com/armsone/imanagerai/ui/composer/ComposerScreen.kt#rememberMediaBitmap",
       "fallback_capable": false,
       "evidence": [],
       "attempts": [
@@ -188,7 +188,7 @@
       "status": "reopened",
       "source_ref": { "kind": "runtime", "value": "Android Canvas bitmap lifetime contract" },
       "target_observation": "The user observed an app crash; Android crash buffer confirmed Canvas: trying to use a recycled bitmap at 2026-08-28 23:12:07 KST.",
-      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt#rememberMediaBitmap",
+      "implementation_ref": "app/src/main/java/com/armsone/imanagerai/ui/composer/ComposerScreen.kt#rememberMediaBitmap",
       "fallback_capable": false,
       "evidence": [],
       "attempts": [
@@ -206,9 +206,9 @@
       "fixture": "fresh_install_then_toggle_settings.automationEnabled",
       "classification": "functional",
       "status": "matched",
-      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Automation/AutomationStudio.swift#automationEnabled" },
+      "source_ref": { "kind": "source", "value": "../iManager/iManager/Features/Automation/AutomationStudio.swift#automationEnabled" },
       "target_observation": "CreatorProfileStore.automationEnabled defaults to false and persists both enabled and disabled values; the dedicated JVM contract test, lint, release build, and three-device data-preserving install passed for the fixed release candidate.",
-      "implementation_ref": "app/src/main/java/com/armsone/starmanager/model/CreatorProfileStore.kt#setAutomationEnabled",
+      "implementation_ref": "app/src/main/java/com/armsone/imanagerai/model/CreatorProfileStore.kt#setAutomationEnabled",
       "fallback_capable": false,
       "evidence": [
         { "id": "automation_contract_tests", "type": "behavior_trace", "path": ".parity/evidence/2026-08-29/automation-contract-tests.json", "sha256": "3892afc0f6edc7e6ae09094186dd3b81c2a2ee44e7338b217c18386a63b5efb6", "post_change": true }
@@ -226,9 +226,9 @@
       "fixture": "cold_launch_enabled / background_15s_return_enabled / toggle_on_while_foregrounded",
       "classification": "functional",
       "status": "needs_verification",
-      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Automation/AutomationStudio.swift#scenePhaseTrigger" },
+      "source_ref": { "kind": "source", "value": "../iManager/iManager/Features/Automation/AutomationStudio.swift#scenePhaseTrigger" },
       "target_observation": "MainActivity.onStart tracks elapsed-realtime since onStop and increments an automationPickerTrigger only on cold start or a >=15s return, gated by automationEnabled and skipped when the same cold launch is a share or camera-shortcut intent; not exercised on-device or in Gradle in this session.",
-      "implementation_ref": "app/src/main/java/com/armsone/starmanager/MainActivity.kt#onStart",
+      "implementation_ref": "app/src/main/java/com/armsone/imanagerai/MainActivity.kt#onStart",
       "fallback_capable": false,
       "evidence": [],
       "attempts": [
@@ -243,9 +243,9 @@
       "fixture": "share_1_image / share_8_images / launcher_long_press_카메라",
       "classification": "functional",
       "status": "needs_verification",
-      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Automation/AutomationStudio.swift#shareExtensionHandoff" },
+      "source_ref": { "kind": "source", "value": "../iManager/iManager/Features/Automation/AutomationStudio.swift#shareExtensionHandoff" },
       "target_observation": "MainActivity.handleShareIntent validates image MIME type per URI, copies bytes without deleting the source, caps at 8, and calls ComposerViewModel.startPhotoAutomation unconditionally. The explicit CAMERA_CAPTURE cold intent opened the existing continuous camera on SM-F968N and exposed the expected capture semantics; ACTION_SEND 1/8 and launcher long-press remain open.",
-      "implementation_ref": "app/src/main/java/com/armsone/starmanager/MainActivity.kt#handleShareIntent",
+      "implementation_ref": "app/src/main/java/com/armsone/imanagerai/MainActivity.kt#handleShareIntent",
       "fallback_capable": false,
       "evidence": [
         { "id": "camera_intent_runtime", "type": "behavior_trace", "path": ".parity/evidence/2026-08-29/camera-intent-runtime.json", "sha256": "3d2fc29c1124b9708465dccadd1c12b9982ad06c7ae30e5f08d98eec4befbe32", "post_change": true }
@@ -263,9 +263,9 @@
       "fixture": "repeated_random_selection_and_exclude_parameter",
       "classification": "functional",
       "status": "matched",
-      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Automation/AutomationStudio.swift#eligibleProviders" },
+      "source_ref": { "kind": "source", "value": "../iManager/iManager/Features/Automation/AutomationStudio.swift#eligibleProviders" },
       "target_observation": "AutomationProviderSelector.ELIGIBLE_PROVIDERS is limited to Gemini, ChatGPT, and Claude. The fixed candidate passed repeated normal and each exclude-parameter path without selecting Grok.",
-      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/automation/AutomationModels.kt#AutomationProviderSelector",
+      "implementation_ref": "app/src/main/java/com/armsone/imanagerai/ui/automation/AutomationModels.kt#AutomationProviderSelector",
       "fallback_capable": false,
       "evidence": [
         { "id": "automation_contract_tests", "type": "behavior_trace", "path": ".parity/evidence/2026-08-29/automation-contract-tests.json", "sha256": "3892afc0f6edc7e6ae09094186dd3b81c2a2ee44e7338b217c18386a63b5efb6", "post_change": true }
@@ -283,9 +283,9 @@
       "fixture": "automation_processing / automation_result / automation_failure",
       "classification": "visual",
       "status": "needs_verification",
-      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Automation/AutomationStudio.swift#fullScreenStates" },
+      "source_ref": { "kind": "source", "value": "../iManager/iManager/Features/Automation/AutomationStudio.swift#fullScreenStates" },
       "target_observation": "AutomationStudio.kt implements Dialog-based processing/result/failure composables with the required labels and testTags; deterministic Compose/vector visuals only, no raster/photographic capture parity performed against iPhone.",
-      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/automation/AutomationStudio.kt#AutomationStudio",
+      "implementation_ref": "app/src/main/java/com/armsone/imanagerai/ui/automation/AutomationStudio.kt#AutomationStudio",
       "fallback_capable": false,
       "evidence": [],
       "attempts": [
@@ -300,13 +300,47 @@
       "fixture": "automation_result_single_photo / automation_result_multi_photo",
       "classification": "functional",
       "status": "needs_verification",
-      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Automation/AutomationStudio.swift#instagramHandoff" },
+      "source_ref": { "kind": "source", "value": "../iManager/iManager/Features/Automation/AutomationStudio.swift#instagramHandoff" },
       "target_observation": "shareToInstagram in AutomationStudio.kt copies text to ClipboardManager and builds ACTION_SEND/ACTION_SEND_MULTIPLE with FileProvider URIs; not exercised on-device.",
-      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/automation/AutomationStudio.kt#shareToInstagram",
+      "implementation_ref": "app/src/main/java/com/armsone/imanagerai/ui/automation/AutomationStudio.kt#shareToInstagram",
       "fallback_capable": false,
       "evidence": [],
       "attempts": [
         { "attempt": 1, "date": "2026-08-29", "action": "Reviewed the existing shareToInstagram implementation for FileProvider authority and clipboard behavior consistency with the composer's own share pipeline.", "result": "Source review completed; on-device share-sheet verification was not performed in this session." }
+      ]
+    },
+    {
+      "id": "product_identity.visible_brand",
+      "route_state": "launcher_and_app_shell",
+      "element": "product name and branded assets",
+      "dimension": "iManagerAI is shown consistently on Apple and Android while the established visual treatment is retained",
+      "fixture": "post_rename_clean_launch",
+      "classification": "visual",
+      "status": "needs_verification",
+      "source_ref": { "kind": "source", "value": "../iManagerAI/iManagerAI/Info.plist#CFBundleDisplayName" },
+      "target_observation": "Android strings, theme resources, launcher aliases, and icon resource filenames use iManagerAI naming; post-change paired captures are pending.",
+      "implementation_ref": "app/src/main/res/values/strings.xml#app_name",
+      "fallback_capable": false,
+      "evidence": [],
+      "attempts": [
+        { "attempt": 1, "date": "2026-08-29", "action": "Renamed product labels, project/source folders, target/package namespaces, and asset/resource filenames to iManagerAI across both platforms.", "result": "Source migration completed; post-change paired rendered evidence remains open." }
+      ]
+    },
+    {
+      "id": "product_identity.deep_link_compatibility",
+      "route_state": "external_automation_handoff",
+      "element": "primary and legacy URL/action routing",
+      "dimension": "new handoffs use imanagerai while deployed imanager and starmanager links and camera actions continue to resolve",
+      "fixture": "imanagerai_automation_link / imanager_automation_link / legacy_starmanager_automation_link / new_and_legacy_camera_actions",
+      "classification": "functional",
+      "status": "needs_verification",
+      "source_ref": { "kind": "source", "value": "../iManagerAI/iManagerAI/AutomationCoordinator.swift#IManagerAutomationConfiguration" },
+      "target_observation": "Android manifest and MainActivity register and route primary iManagerAI, compatibility iManager, and legacy StarManager forms; runtime invocation evidence is pending.",
+      "implementation_ref": "app/src/main/java/com/armsone/imanagerai/MainActivity.kt#handleIncomingIntent",
+      "fallback_capable": true,
+      "evidence": [],
+      "attempts": [
+        { "attempt": 1, "date": "2026-08-29", "action": "Added imanagerai as primary scheme/action and retained imanager and deployed starmanager values as explicit compatibility fallbacks on both platforms.", "result": "Source migration completed; paired runtime routing traces remain open." }
       ]
     }
   ]

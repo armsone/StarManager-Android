@@ -1,25 +1,25 @@
 contract_version: 1
-product_id: "starmanager"
+product_id: "imanagerai"
 
 reference_inventory:
   member: "ios"
   revision: "2.4.0"
   scanned_roots:
-    - "StarManager"
+    - "iManagerAI"
   uncovered_source_refs: []
 
 capabilities:
   - id: "direct_updates"
     purpose: "In-app self-update management for direct APK distribution on Android, providing update checks, background downloading, cryptographic and package validation, and handoff to the system package installer."
     source_refs:
-      - file: "StarManager/App/Distribution"
+      - file: "iManager/App/Distribution"
         description: "Apple platform update distribution (managed via TestFlight)"
     entry_points:
       - "ProfileSettingsScreen (DirectUpdateSettings under '앱 업데이트' section)"
       - "MainActivity.onCreate (DirectUpdateManager.start background check on startup)"
     preconditions:
       - "Active network connectivity"
-      - "Official GitHub release assets published under armsone/StarManager-Android"
+      - "Official GitHub release assets published under armsone/iManagerAI-Android, fallback armsone/iManager-Android, or legacy armsone/StarManager-Android"
       - "Target APK signed with matching certificate and containing newer version or build code"
     inputs:
       - "Installed app version (BuildConfig.VERSION_NAME) and version code (BuildConfig.VERSION_CODE)"
@@ -41,7 +41,7 @@ capabilities:
       - "Version code check: archiveCode > BuildConfig.VERSION_CODE"
       - "Signer certificate validation: archive signer SHA-256 matched against app signatures"
       - "Auto-download conditions: Unmetered network connection AND (charging OR battery level >= 20%)"
-      - "Release URL validation: HTTPS, host github.com, path /armsone/StarManager-Android/releases/download/{tag}/{asset}"
+      - "Release URL validation: HTTPS, host github.com, path /armsone/iManagerAI-Android/releases/download/{tag}/{asset}; fallback iManager-Android and legacy StarManager-Android remain accepted during migration"
     data_contracts:
       DirectUpdateState:
         phase: "UpdatePhase (IDLE, CHECKING, CURRENT, AVAILABLE, DOWNLOADING, READY, ERROR)"
@@ -99,7 +99,7 @@ capabilities:
         notes: "Managed externally by Apple TestFlight."
       android:
         status: "implemented_source_only"
-        entry_file: "app/src/main/java/com/armsone/starmanager/update/DirectUpdateManager.kt"
+        entry_file: "app/src/main/java/com/armsone/imanagerai/update/DirectUpdateManager.kt"
         verification: "pending_runtime"
     dependencies:
       - "android.app.DownloadManager"
@@ -111,10 +111,10 @@ capabilities:
   - id: "posting_handoff"
     purpose: "Dominant Instagram sharing workflow from the Composer preview surface, copying composed post text to the system clipboard and handing off single or multiple media attachments to the OS share sheet / chooser."
     source_refs:
-      - file: "StarManager/Features/Composer/ComposerView.swift"
+      - file: "iManager/Features/Composer/ComposerView.swift"
         symbol: "InstagramShareButton"
         description: "Dominant 'Instagram으로 →' button with automatic caption clipboard copy and UIActivityViewController handoff"
-      - file: "StarManager/ViewModels/ComposerViewModel.swift"
+      - file: "iManager/ViewModels/ComposerViewModel.swift"
         symbol: "prepareShare"
         description: "Prepares media attachments and handles clipboard copy before presenting share sheet"
     entry_points:
@@ -128,7 +128,7 @@ capabilities:
       - "GeneratedPost (composedText, id)"
       - "ComposerUiState.mediaItems (1..8 items with byte data, MediaKind, and fileExtension)"
       - "Context (ContentResolver, cacheDir, ClipboardManager)"
-    normal_result: "Composed caption text copied to system clipboard with label 'StarManager', temporary media files written to cache directory with zero-padded filenames, FileProvider content URIs generated with read permission grant, and Android chooser opened with ACTION_SEND or ACTION_SEND_MULTIPLE."
+    normal_result: "Composed caption text copied to system clipboard with label 'iManager', temporary media files written to cache directory with zero-padded filenames, FileProvider content URIs generated with read permission grant, and Android chooser opened with ACTION_SEND or ACTION_SEND_MULTIPLE."
     states:
       idle: "Waiting for user to initiate share"
       isPreparingShare: "Writing share files to disk and generating FileProvider URIs (shows spinner and '준비 중')"
@@ -201,17 +201,17 @@ capabilities:
     implementations:
       ios:
         status: "reference_verified"
-        entry_file: "StarManager/Features/Composer/ComposerView.swift"
+        entry_file: "iManager/Features/Composer/ComposerView.swift"
         verification: "reference_verified"
       android:
         status: "build_verified_runtime_pending"
-        entry_file: "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt"
+        entry_file: "app/src/main/java/com/armsone/imanagerai/ui/composer/ComposerScreen.kt"
         verification: "Unit tests, debug build, and lint passed; runtime behavior and visual parity remain pending."
     dependencies:
       - "androidx.core.content.FileProvider"
       - "android.content.ClipboardManager"
       - "android.content.Intent"
-      - "com.armsone.starmanager.design.GlossyPrimaryButton"
+      - "com.armsone.imanagerai.design.GlossyPrimaryButton"
     parity_row_ids:
       - "composer_posting_handoff_dominant_action"
       - "composer_posting_handoff_single_attachment"
@@ -222,7 +222,7 @@ capabilities:
   - id: "simplified_preferences_and_settings_order"
     purpose: "A dense optional style panel below the media-first composer, without owner-specific prose or preset shortcuts. Every active instruction sent to AI is visible and editable on the first screen."
     source_refs:
-      - file: "StarManager/Features/Settings/ProfileSettingsView.swift"
+      - file: "iManager/Features/Settings/ProfileSettingsView.swift"
         description: "iPhone Settings view top-to-bottom contract with simplified preferences"
     entry_points:
       - "ComposerScreen -> style settings panel"
@@ -275,15 +275,15 @@ capabilities:
     implementations:
       ios:
         status: "implemented_source_only"
-        entry_file: "StarManager/Features/Composer/ComposerView.swift"
+        entry_file: "iManager/Features/Composer/ComposerView.swift"
         verification: "Current compact composer revision is source-only and not built or installed"
       android:
         status: "implemented_source_only"
-        entry_file: "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt"
+        entry_file: "app/src/main/java/com/armsone/imanagerai/ui/composer/ComposerScreen.kt"
         verification: "Current compact composer revision is source-only and not built or installed"
     dependencies:
       - "androidx.compose.material3"
-      - "com.armsone.starmanager.model.CreatorProfileStore"
+      - "com.armsone.imanagerai.model.CreatorProfileStore"
     parity_row_ids:
       - "settings_section_order_parity"
       - "settings_simplified_preferences_surface"
@@ -295,7 +295,7 @@ capabilities:
   - id: "external_ai_login_session_reuse"
     purpose: "Truthful per-provider login state and dedicated in-app browser management for Gemini, ChatGPT, and Claude, with persistent web sessions shared between settings and composer."
     source_refs:
-      - file: "StarManager/Features/Settings/ProfileSettingsView.swift"
+      - file: "iManager/Features/Settings/ProfileSettingsView.swift"
         description: "External AI login rows opening provider web surfaces"
     entry_points:
       - "Settings -> 외부 AI 로그인 관리 -> provider row showing 확인 중, 로그인됨, or 로그인 필요"
@@ -345,11 +345,11 @@ capabilities:
     implementations:
       ios:
         status: "build_verified_runtime_pending"
-        entry_file: "StarManager/Features/Settings/ProfileSettingsView.swift"
+        entry_file: "iManager/Features/Settings/ProfileSettingsView.swift"
         verification: "Source inspected and generic iOS Simulator debug build passed after attached-viewport and cancelled-probe race corrections; authenticated-device status timing and auto-dismiss trace pending"
       android:
         status: "runtime_verified"
-        entry_file: "app/src/main/java/com/armsone/starmanager/ui/externalai/ExternalAISurface.kt"
+        entry_file: "app/src/main/java/com/armsone/imanagerai/ui/externalai/ExternalAISurface.kt"
         verification: "Focused ExternalAI unit tests, debug APK build, replacement install, all-provider 로그인됨 settings capture, and authenticated ChatGPT exactly-once auto-dismiss trace passed on SM-F968N"
     dependencies:
       - "android.webkit.WebView"
@@ -362,7 +362,7 @@ capabilities:
   - id: "external_ai_provider_roster_and_composer_browser"
     purpose: "External AI provider choices (Gemini, ChatGPT, Claude, 기기 AI) in a single responsive row in Composer with user-selectable hidden/visible browser automation, deterministic status progression, and manual fallback in-app browser."
     source_refs:
-      - file: "StarManager/Features/Composer/ComposerView.swift"
+      - file: "iManager/Features/Composer/ComposerView.swift"
         description: "AI choice row and retained background web browser for AI generation"
     entry_points:
       - "ComposerScreen -> AIChoiceCard / GlossyPrimaryButton"
@@ -438,11 +438,11 @@ capabilities:
     implementations:
       ios:
         status: "reference_verified"
-        entry_file: "StarManager/Features/Composer/ComposerView.swift"
+        entry_file: "iManager/Features/Composer/ComposerView.swift"
         verification: "reference_verified"
       android:
         status: "runtime_verified"
-        entry_file: "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt"
+        entry_file: "app/src/main/java/com/armsone/imanagerai/ui/composer/ComposerScreen.kt"
         verification: "89 focused JVM tests and assembleDebug passed on 2026-08-28; replacement APK installed on SM-F968N and SM-T500; authenticated hidden Gemini result import was previously verified on SM-F968N"
     dependencies:
       - "android.webkit.WebView"
@@ -463,7 +463,7 @@ capabilities:
   - id: "unified_media_first_composer"
     purpose: "One media-first composer supports photo-only, photo-and-text, or text-only drafting; AI assistance updates the same editable text field instead of opening a separate preview panel."
     source_refs:
-      - file: "StarManager/Features/Composer/ComposerView.swift"
+      - file: "iManager/Features/Composer/ComposerView.swift"
         description: "Current iPhone unified composer and selected-image external AI handoff"
     entry_points:
       - "ComposerScreen"
@@ -522,11 +522,11 @@ capabilities:
     implementations:
       ios:
         status: "runtime_verified_user_reported"
-        entry_file: "StarManager/Features/Composer/ComposerView.swift"
+        entry_file: "iManager/Features/Composer/ComposerView.swift"
         verification: "iPhone device build, replacement install, and launch passed; the user confirmed Gemini, ChatGPT, and Claude all worked perfectly"
       android:
         status: "build_and_install_verified_runtime_provider_pending"
-        entry_file: "app/src/main/java/com/armsone/starmanager/ui/composer/ComposerScreen.kt"
+        entry_file: "app/src/main/java/com/armsone/imanagerai/ui/composer/ComposerScreen.kt"
         verification: "JVM tests, assembleDebug, lintDebug, AIBI contract regressions, and data-preserving replacement installs and launches passed on SM-F968N and SM-T500; fresh portrait, eight-photo responsiveness, and live provider attachment traces remain pending"
     dependencies:
       - "Native photo picker and camera"
@@ -542,7 +542,7 @@ capabilities:
   - id: "compact_generation_prompt"
     purpose: "Transparent, destination-aware generation prompt assembled only from the user's current content and visible preferences."
     source_refs:
-      - file: "StarManager/Models/CreatorProfile.swift"
+      - file: "iManager/Models/CreatorProfile.swift"
         description: "generationPrompt assembly logic"
     entry_points:
       - "CreatorProfile.generationPrompt"
@@ -590,21 +590,21 @@ capabilities:
     implementations:
       ios:
         status: "reference_verified"
-        entry_file: "StarManager/Models/CreatorProfile.swift"
+        entry_file: "iManager/Models/CreatorProfile.swift"
         verification: "reference_verified"
       android:
         status: "unit_test_verified_runtime_pending"
-        entry_file: "app/src/main/java/com/armsone/starmanager/model/CreatorProfile.kt"
+        entry_file: "app/src/main/java/com/armsone/imanagerai/model/CreatorProfile.kt"
         verification: "65-test JVM suite passed including compact section order/content and conditional additional request; live WebView payload pending"
     dependencies:
-      - "com.armsone.starmanager.model.CreatorProfile"
+      - "com.armsone.imanagerai.model.CreatorProfile"
     parity_row_ids:
       - "compact_generation_prompt_parity"
 
   - id: "automation_studio"
     purpose: "Opt-in ordinary automation that opens a photo picker on cold launch or on return after 15+ seconds, normalizes the ordered selection, hands it to a randomly chosen external AI provider (Gemini, ChatGPT, or Claude; Grok excluded), and presents a full-screen Automation Studio surface through processing, result, and failure states with an Instagram handoff. External image shares (ACTION_SEND/ACTION_SEND_MULTIPLE) and the launcher camera shortcut route into the same automation pipeline regardless of the opt-in setting."
     source_refs:
-      - file: "StarManager/Features/Automation/AutomationStudio.swift"
+      - file: "iManager/Features/Automation/AutomationStudio.swift"
         description: "iPhone 2.5.0 Automation Studio opt-in flow, full-screen state machine, and provider selection"
     entry_points:
       - "MainActivity.onStart (cold launch / return after >=15s picker trigger, gated by CreatorProfileStore.automationEnabled)"
@@ -661,16 +661,16 @@ capabilities:
     implementations:
       ios:
         status: "reference_verified"
-        entry_file: "StarManager/Features/Automation/AutomationStudio.swift"
+        entry_file: "iManager/Features/Automation/AutomationStudio.swift"
         verification: "reference_verified"
       android:
         status: "needs_verification"
-        entry_file: "app/src/main/java/com/armsone/starmanager/ui/automation/AutomationStudio.kt"
+        entry_file: "app/src/main/java/com/armsone/imanagerai/ui/automation/AutomationStudio.kt"
         verification: "Source reviewed and wired end-to-end (MainActivity, ComposerViewModel, ComposerScreen, ProfileSettingsScreen); focused JVM tests added (AutomationProviderSelectorTest, CreatorProfileStoreTest automationEnabled case) but not executed, and assembleDebug/lintDebug were not run in this session because no shell/build tool was available"
     dependencies:
       - "android.webkit.WebView"
       - "androidx.core.content.FileProvider"
-      - "com.armsone.starmanager.ui.externalai.ExternalAIImageNormalizer"
+      - "com.armsone.imanagerai.ui.externalai.ExternalAIImageNormalizer"
     parity_row_ids:
       - "automation_studio_opt_in_default_off"
       - "automation_studio_cold_launch_and_return_trigger"
@@ -678,3 +678,75 @@ capabilities:
       - "automation_studio_provider_roster_excludes_grok"
       - "automation_studio_full_screen_states"
       - "automation_studio_instagram_handoff"
+
+  - id: "product_identity_imanagerai"
+    purpose: "Present the product consistently as iManagerAI across Apple and Android projects while preserving installed-app data and inbound compatibility."
+    source_refs:
+      - file: "iManagerAI/Info.plist"
+        description: "Apple display name, primary imanagerai URL scheme, compatibility imanager URL scheme, and legacy starmanager URL scheme"
+      - file: "app/src/main/res/values/strings.xml"
+        description: "Android user-visible app name"
+    entry_points:
+      - "App launcher and system app labels"
+      - "imanagerai://automation deep links"
+      - "Camera launcher shortcut"
+      - "AIBI consumer registration"
+    preconditions:
+      - "Existing installs may contain data under legacy identifiers"
+    inputs:
+      - "Primary brand iManagerAI"
+      - "Compatibility identifiers from iManager and legacy identifiers from deployed StarManager builds"
+    normal_result: "Both platforms expose iManagerAI as the product name, use imanagerai for newly generated links and actions, and continue accepting compatibility imanager and legacy starmanager links/actions without resetting app data."
+    states:
+      primary: "iManagerAI labels, imanagerai URL scheme, com.armsone.imanagerai source namespace"
+      compatibility: "imanager URL scheme, iManager-Android fallback repo"
+      legacy_compatibility: "Existing bundle/application identifiers, app group, keychain service, preferences, FileProvider authority, and legacy deep links remain readable"
+    algorithms_and_thresholds:
+      - "Prefer new iManagerAI token header and environment name; accept compatibility iManager and legacy names as fallback"
+      - "Prefer iManagerAI-Android release repository/assets; accept fallback iManager-Android and legacy StarManager-Android repository/assets during migration"
+    data_contracts:
+      apple_bundle_id: "com.armsone.StarManager (preserved)"
+      apple_share_bundle_id: "com.armsone.StarManager.ShareExtension (preserved)"
+      apple_app_group: "group.com.armsone.starmanager (preserved)"
+      android_application_id: "com.armsone.starmanager (preserved)"
+      android_namespace: "com.armsone.imanagerai"
+      primary_url_scheme: "imanagerai"
+      compatibility_url_scheme: "imanager"
+      legacy_url_scheme: "starmanager"
+    producer_consumer_routes:
+      - "Share extension and external callers generate imanagerai://automation; both apps accept imanagerai, imanager, and starmanager"
+      - "Apple and Android AI clients send X-iManagerAI-Token with X-iManager-Token and X-StarManager-Token compatibility"
+    persistence_relaunch:
+      - "All deployed storage-bearing identifiers remain unchanged"
+    permissions_privacy_security:
+      - "No new data access or permission is introduced by the rename"
+    background_lifecycle:
+      - "No lifecycle behavior change"
+    gestures_accessibility:
+      - "System-visible labels and shortcut labels announce iManagerAI"
+    supported_devices_layouts:
+      - "All currently supported Apple and Android devices"
+    visual_reference:
+      - "Existing visual design retained; brand text and asset filenames renamed"
+    platform_adaptations:
+      ios:
+        status: "build_verified"
+        description: "Xcode project, targets, source folders, visible strings, primary deep links, and asset filenames renamed"
+      android:
+        status: "build_verified"
+        description: "Gradle project name, namespace, Kotlin package folders, visible strings, primary deep links, and resource filenames renamed"
+    intentional_differences:
+      identifier_casing: "Apple Swift types use IManagerAI while user-visible product and Xcode target names use iManagerAI."
+    implementations:
+      ios:
+        status: "build_verified"
+        entry_file: "iManagerAI/IManagerAIApp.swift"
+        verification: "iOS Simulator Debug build succeeded with iManagerAI and iManagerAIShare targets"
+      android:
+        status: "build_verified"
+        entry_file: "app/src/main/java/com/armsone/imanagerai/MainActivity.kt"
+        verification: "testDebugUnitTest and assembleDebug succeeded"
+    dependencies: []
+    parity_row_ids:
+      - "product_identity.visible_brand"
+      - "product_identity.deep_link_compatibility"

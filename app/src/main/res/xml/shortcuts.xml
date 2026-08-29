@@ -7,8 +7,8 @@
         android:shortcutShortLabel="@string/shortcut_camera"
         android:shortcutLongLabel="@string/shortcut_camera">
         <intent
-            android:action="com.armsone.starmanager.action.CAMERA_CAPTURE"
+            android:action="com.armsone.imanagerai.action.CAMERA_CAPTURE"
             android:targetPackage="com.armsone.starmanager"
-            android:targetClass="com.armsone.starmanager.MainActivity" />
+            android:targetClass="com.armsone.imanagerai.MainActivity" />
     </shortcut>
 </shortcuts>

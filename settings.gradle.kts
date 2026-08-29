@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "StarManager"
+rootProject.name = "iManagerAI-Android"
 include(":app")
