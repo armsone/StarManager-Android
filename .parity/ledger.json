@@ -197,6 +197,117 @@
       "reopen_history": [
         { "date": "2026-08-28", "observed_by": "user", "description": "App terminated while displaying the newly decoded selected photos; device crash buffer identified a recycled bitmap draw." }
       ]
+    },
+    {
+      "id": "automation_studio.opt_in_default_off",
+      "route_state": "settings_automation_section",
+      "element": "automation_enabled_toggle",
+      "dimension": "automationEnabled persists false by default and only the opt-in toggle changes it",
+      "fixture": "fresh_install_then_toggle_settings.automationEnabled",
+      "classification": "functional",
+      "status": "matched",
+      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Automation/AutomationStudio.swift#automationEnabled" },
+      "target_observation": "CreatorProfileStore.automationEnabled defaults to false and persists both enabled and disabled values; the dedicated JVM contract test, lint, release build, and three-device data-preserving install passed for the fixed release candidate.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/model/CreatorProfileStore.kt#setAutomationEnabled",
+      "fallback_capable": false,
+      "evidence": [
+        { "id": "automation_contract_tests", "type": "behavior_trace", "path": ".parity/evidence/2026-08-29/automation-contract-tests.json", "sha256": "3892afc0f6edc7e6ae09094186dd3b81c2a2ee44e7338b217c18386a63b5efb6", "post_change": true }
+      ],
+      "attempts": [
+        { "attempt": 1, "date": "2026-08-29", "action": "Reviewed and wired CreatorProfileStore.automationEnabled persistence, added a dedicated JVM test, and set the visible settings hint copy to the exact required string.", "result": "Source and unit-test review completed; Gradle test/build/lint execution and on-device verification pending because no shell tool was available in this session." },
+        { "attempt": 2, "date": "2026-08-29", "action": "Ran the full JVM suite, lintDebug, assembleRelease, inspected the fixed candidate identity, and installed it with -r on SM-F968N, SM-F956N, and SM-T500.", "result": "90 tests passed with no failures, lint and release build passed, and all three devices report versionName 2.5.1 and versionCode 346666." }
+      ]
+    },
+    {
+      "id": "automation_studio.cold_launch_and_return_trigger",
+      "route_state": "app_foreground_transition",
+      "element": "automation_picker_trigger",
+      "dimension": "picker opens automatically on cold launch or on return to foreground after >=15s, only when automationEnabled is true, and never immediately after enabling the setting",
+      "fixture": "cold_launch_enabled / background_15s_return_enabled / toggle_on_while_foregrounded",
+      "classification": "functional",
+      "status": "needs_verification",
+      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Automation/AutomationStudio.swift#scenePhaseTrigger" },
+      "target_observation": "MainActivity.onStart tracks elapsed-realtime since onStop and increments an automationPickerTrigger only on cold start or a >=15s return, gated by automationEnabled and skipped when the same cold launch is a share or camera-shortcut intent; not exercised on-device or in Gradle in this session.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/MainActivity.kt#onStart",
+      "fallback_capable": false,
+      "evidence": [],
+      "attempts": [
+        { "attempt": 1, "date": "2026-08-29", "action": "Implemented onStart/onStop elapsed-realtime tracking, the automationPickerTrigger Compose state, and ComposerScreen photo-picker wiring routed to ComposerViewModel.startOrdinaryPhotoAutomation.", "result": "Source review completed; runtime device/emulator verification and Gradle build/test execution were not performed in this session." }
+      ]
+    },
+    {
+      "id": "automation_studio.external_share_and_camera_shortcut_always_active",
+      "route_state": "external_share_or_launcher_shortcut",
+      "element": "share_intent_and_camera_shortcut_routing",
+      "dimension": "ACTION_SEND/ACTION_SEND_MULTIPLE with 1-8 ordered images routes immediately into automation, and the '카메라' launcher shortcut opens the existing continuous camera, regardless of automationEnabled",
+      "fixture": "share_1_image / share_8_images / launcher_long_press_카메라",
+      "classification": "functional",
+      "status": "needs_verification",
+      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Automation/AutomationStudio.swift#shareExtensionHandoff" },
+      "target_observation": "MainActivity.handleShareIntent validates image MIME type per URI, copies bytes without deleting the source, caps at 8, and calls ComposerViewModel.startPhotoAutomation unconditionally. The explicit CAMERA_CAPTURE cold intent opened the existing continuous camera on SM-F968N and exposed the expected capture semantics; ACTION_SEND 1/8 and launcher long-press remain open.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/MainActivity.kt#handleShareIntent",
+      "fallback_capable": false,
+      "evidence": [
+        { "id": "camera_intent_runtime", "type": "behavior_trace", "path": ".parity/evidence/2026-08-29/camera-intent-runtime.json", "sha256": "3d2fc29c1124b9708465dccadd1c12b9982ad06c7ae30e5f08d98eec4befbe32", "post_change": true }
+      ],
+      "attempts": [
+        { "attempt": 1, "date": "2026-08-29", "action": "Implemented handleIncomingIntent/handleShareIntent/onNewIntent in MainActivity and a cameraShortcutTrigger consumed by ComposerScreen's existing requestOpenCamera path.", "result": "Source review completed; Gradle build/test and on-device share-sheet/launcher-shortcut verification were not performed in this session." },
+        { "attempt": 2, "date": "2026-08-29", "action": "Launched the fixed release candidate from a cold explicit CAMERA_CAPTURE intent on SM-F968N and captured UI semantics.", "result": "MainActivity opened the continuous camera with 취소, 0/8, 완료, 카메라 전환, and 사진 촬영 visible; share 1/8 and launcher long-press fixtures remain unverified." }
+      ]
+    },
+    {
+      "id": "automation_studio.provider_roster_excludes_grok",
+      "route_state": "automation_studio_processing",
+      "element": "random_provider_selection",
+      "dimension": "random automation provider selection is limited to Gemini, ChatGPT, and Claude; Grok is never chosen",
+      "fixture": "repeated_random_selection_and_exclude_parameter",
+      "classification": "functional",
+      "status": "matched",
+      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Automation/AutomationStudio.swift#eligibleProviders" },
+      "target_observation": "AutomationProviderSelector.ELIGIBLE_PROVIDERS is limited to Gemini, ChatGPT, and Claude. The fixed candidate passed repeated normal and each exclude-parameter path without selecting Grok.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/automation/AutomationModels.kt#AutomationProviderSelector",
+      "fallback_capable": false,
+      "evidence": [
+        { "id": "automation_contract_tests", "type": "behavior_trace", "path": ".parity/evidence/2026-08-29/automation-contract-tests.json", "sha256": "3892afc0f6edc7e6ae09094186dd3b81c2a2ee44e7338b217c18386a63b5efb6", "post_change": true }
+      ],
+      "attempts": [
+        { "attempt": 1, "date": "2026-08-29", "action": "Reviewed AutomationProviderSelector and added AutomationProviderSelectorTest covering the Grok exclusion and the exclude-parameter path.", "result": "Source and test-source review completed; Gradle test execution was not performed in this session." },
+        { "attempt": 2, "date": "2026-08-29", "action": "Executed the provider-selection contract across 50 normal selections and 50 selections for each excluded provider.", "result": "All assertions passed; no normal or excluded-provider path selected Grok." }
+      ]
+    },
+    {
+      "id": "automation_studio.full_screen_states",
+      "route_state": "automation_studio_processing_result_failure",
+      "element": "automation_full_screen_surface",
+      "dimension": "processing shows preparing/sending/waiting with a cancel X; result shows a 40x40 thumbnail strip, result card, 'Instagram으로 보내기', '다시 만들기', '취소'; failure shows '다시 시도' (selects another eligible provider) and '닫기'",
+      "fixture": "automation_processing / automation_result / automation_failure",
+      "classification": "visual",
+      "status": "needs_verification",
+      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Automation/AutomationStudio.swift#fullScreenStates" },
+      "target_observation": "AutomationStudio.kt implements Dialog-based processing/result/failure composables with the required labels and testTags; deterministic Compose/vector visuals only, no raster/photographic capture parity performed against iPhone.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/automation/AutomationStudio.kt#AutomationStudio",
+      "fallback_capable": false,
+      "evidence": [],
+      "attempts": [
+        { "attempt": 1, "date": "2026-08-29", "action": "Wired AutomationStudio into ComposerScreen against ComposerViewModel.automationSessionState, and connected retry/failure provider re-selection to AutomationProviderSelector.", "result": "Source review completed; Gradle build/lint and visual capture comparisons were not performed in this session." }
+      ]
+    },
+    {
+      "id": "automation_studio.instagram_handoff",
+      "route_state": "automation_studio_result",
+      "element": "instagram_share_cta",
+      "dimension": "copies the generated caption to the clipboard and shares the ordered media via FileProvider using ACTION_SEND/ACTION_SEND_MULTIPLE",
+      "fixture": "automation_result_single_photo / automation_result_multi_photo",
+      "classification": "functional",
+      "status": "needs_verification",
+      "source_ref": { "kind": "source", "value": "../StarManager/StarManager/Features/Automation/AutomationStudio.swift#instagramHandoff" },
+      "target_observation": "shareToInstagram in AutomationStudio.kt copies text to ClipboardManager and builds ACTION_SEND/ACTION_SEND_MULTIPLE with FileProvider URIs; not exercised on-device.",
+      "implementation_ref": "app/src/main/java/com/armsone/starmanager/ui/automation/AutomationStudio.kt#shareToInstagram",
+      "fallback_capable": false,
+      "evidence": [],
+      "attempts": [
+        { "attempt": 1, "date": "2026-08-29", "action": "Reviewed the existing shareToInstagram implementation for FileProvider authority and clipboard behavior consistency with the composer's own share pipeline.", "result": "Source review completed; on-device share-sheet verification was not performed in this session." }
+      ]
     }
   ]
 }

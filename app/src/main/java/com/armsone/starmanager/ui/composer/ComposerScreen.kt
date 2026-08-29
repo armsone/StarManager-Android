@@ -168,6 +168,8 @@ import com.armsone.starmanager.model.PostMood
 import com.armsone.starmanager.model.PostStyle
 import com.armsone.starmanager.model.PostTone
 import com.armsone.starmanager.service.DirectAIProvider
+import com.armsone.starmanager.ui.automation.AutomationSessionState
+import com.armsone.starmanager.ui.automation.AutomationStudio
 import com.armsone.starmanager.ui.externalai.ExternalAIAttachment
 import com.armsone.starmanager.ui.externalai.ExternalAIAutomationPhase
 import com.armsone.starmanager.ui.externalai.ExternalAIErrorSanitizer
@@ -194,11 +196,17 @@ import kotlin.coroutines.resume
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
-fun ComposerScreen(viewModel: ComposerViewModel) {
+fun ComposerScreen(
+    viewModel: ComposerViewModel,
+    automationPickerTrigger: Int = 0,
+    cameraShortcutTrigger: Int = 0
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val profile by viewModel.profileStore.profile.collectAsStateWithLifecycle()
+    val automationEnabled by viewModel.profileStore.automationEnabled.collectAsStateWithLifecycle()
+    val automationSessionState by viewModel.automationSessionState.collectAsStateWithLifecycle()
     val scrollState = rememberScrollState()
     val appearance = LocalAppAppearance.current
     val focusManager = LocalFocusManager.current
@@ -272,6 +280,79 @@ fun ComposerScreen(viewModel: ComposerViewModel) {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         if (permissions[Manifest.permission.CAMERA] == true) showsContinuousCamera = true
+    }
+
+    val requestOpenCamera = remember(context) {
+        {
+            val hasCamera = context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
+            if (!hasCamera) {
+                viewModel.cameraUnavailable()
+            } else {
+                val permissions = buildList {
+                    add(Manifest.permission.CAMERA)
+                    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                }.filter {
+                    ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+                }
+                if (permissions.isEmpty()) showsContinuousCamera = true
+                else cameraPermissionLauncher.launch(permissions.toTypedArray())
+            }
+        }
+    }
+
+    LaunchedEffect(cameraShortcutTrigger) {
+        if (cameraShortcutTrigger > 0) requestOpenCamera()
+    }
+
+    val automationPhotoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(maxItems = MediaAttachmentPolicy.MAX_ITEMS)
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            scope.launch {
+                val images = withContext(Dispatchers.IO) {
+                    uris.mapNotNull { uri ->
+                        runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
+                    }
+                }
+                if (images.isNotEmpty()) viewModel.startOrdinaryPhotoAutomation(images)
+            }
+        }
+    }
+
+    LaunchedEffect(automationPickerTrigger) {
+        if (automationPickerTrigger > 0) {
+            automationPhotoPicker.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        }
+    }
+
+    LaunchedEffect(automationEnabled) {
+        if (!automationEnabled) viewModel.cancelOrdinaryAutomationIfActive()
+    }
+
+    AutomationStudio(
+        state = automationSessionState,
+        onStartAutomation = { images, provider -> viewModel.startPhotoAutomation(images, provider) },
+        onCancel = { viewModel.cancelAutomationSession() }
+    )
+
+    if (automationSessionState is AutomationSessionState.Processing) {
+        val processing = automationSessionState as AutomationSessionState.Processing
+        if (processing.attachments.isNotEmpty()) {
+            HiddenExternalAIWebView(
+                provider = processing.provider,
+                prompt = profile.photoOnlyPrompt(profile.mood, profile.preferredLength, processing.attachments.size),
+                attachments = processing.attachments,
+                requestId = processing.requestId,
+                onSubmitted = { viewModel.onAutomationStudioSubmitted() },
+                onFallbackRequired = { reason ->
+                    viewModel.onAutomationStudioError("FALLBACK_REQUIRED:${reason.name}", processing.provider)
+                },
+                onError = { err -> viewModel.onAutomationStudioError(err, processing.provider) },
+                onSuccess = { answer -> viewModel.onAutomationStudioSuccess(answer, context) }
+            )
+        }
     }
 
     if (showsContinuousCamera) {
@@ -400,22 +481,7 @@ fun ComposerScreen(viewModel: ComposerViewModel) {
                             icon = Icons.Filled.PhotoCamera,
                             enabled = MediaAttachmentPolicy.availableSlots(state.mediaItems.size) > 0,
                             appearance = appearance,
-                            onClick = {
-                                val hasCamera = context.packageManager
-                                    .hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
-                                if (!hasCamera) {
-                                    viewModel.cameraUnavailable()
-                                } else {
-                                    val permissions = buildList {
-                                        add(Manifest.permission.CAMERA)
-                                        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                                    }.filter {
-                                        ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
-                                    }
-                                    if (permissions.isEmpty()) showsContinuousCamera = true
-                                    else cameraPermissionLauncher.launch(permissions.toTypedArray())
-                                }
-                            },
+                            onClick = requestOpenCamera,
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("composer.camera")
@@ -1142,7 +1208,7 @@ private fun GenerationStatusCard(
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-private fun HiddenExternalAIWebView(
+internal fun HiddenExternalAIWebView(
     provider: DirectAIProvider,
     prompt: String,
     attachments: List<ExternalAIAttachment> = emptyList(),
@@ -1394,7 +1460,7 @@ private fun HiddenExternalAIWebView(
     }
 }
 
-private fun dismissHiddenAIBIKeyboard(context: Context, webView: WebView) {
+internal fun dismissHiddenAIBIKeyboard(context: Context, webView: WebView) {
     fun dismissNow() {
         if (!webView.isAttachedToWindow) return
         webView.evaluateJavascript(
@@ -1526,7 +1592,7 @@ private fun MediaOrderEditor(viewModel: ComposerViewModel, state: ComposerUiStat
     }
 }
 
-private tailrec fun Context.findActivity(): Activity? = when (this) {
+internal tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null

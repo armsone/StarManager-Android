@@ -4,9 +4,10 @@ iOS SwiftUI 앱 `/StarManager`의 도달 가능한 두 탭(**만들기**, **내 
 단일 모듈 Kotlin/Jetpack Compose 앱입니다.
 
 - applicationId: `com.armsone.starmanager` · minSdk 26 · target/compileSdk 37 · Java/Kotlin 17
-- 앱 버전: `2.4.0` · versionCode `345988` · 표시 빌드 `202608290628`
+- 앱 버전: `2.5.1` · versionCode `346666` · 표시 빌드 `202608291746`
 - 폰/태블릿 지원, 화면 회전 잠금 없음, 라이트 테마 강제(iOS `preferredColorScheme(.light)` 대응)
 - 설정에서 GitHub Releases의 서명 APK 업데이트를 자동 또는 수동으로 확인·다운로드하고 시스템 설치자로 넘깁니다.
+- 자동화는 기본으로 꺼져 있으며 사용자가 설정에서 켜면 앱 실행·15초 복귀 시 사진 선택부터 AI 전달까지 이어집니다. 외부 사진 공유와 카메라 바로가기는 이 설정과 무관하게 사용할 수 있습니다.
 - iOS의 아카이브(README 전용)와 도달 불가능한 레거시 백엔드/Image Playground 표면은 이식하지 않음
 
 ## 빌드
@@ -70,5 +71,4 @@ adb shell am start -n com.armsone.starmanager/.MainActivity \
 - Android 공유 시트는 완료/취소 콜백이 없어 iOS의 "공유 완료/취소" 상태 메시지 분기는
   생략되고, 공유 직전 상태 메시지("문구 복사됨" 등)만 표시합니다.
 - 프리셋 삭제는 iOS 스와이프 대신 명시적 삭제 버튼입니다.
-- 페어 캡처가 없어 픽셀 패리티는 아직 검증되지 않았습니다. 현재 소스 상태에서 JVM 단위 테스트와
-  `assembleDebug`는 통과했습니다. 자세한 증거 상태는 `parity/matrix/parity.csv`에 기록합니다.
+- 새 Automation Studio 전체 화면은 동일 픽스처의 iPhone·Android 페어 캡처가 남아 있어 픽셀 패리티를 아직 확정하지 않았습니다. 현재 릴리스 후보는 JVM 단위 테스트, lint, `assembleRelease`, 3대 실기기 교체 설치를 통과했습니다. 자세한 증거 상태는 `.parity/ledger.json`에 기록합니다.

@@ -1,0 +1,23 @@
+{
+  "date": "2026-08-29",
+  "candidate": {
+    "versionName": "2.5.1",
+    "versionCode": 346666,
+    "buildNumber": "202608291746"
+  },
+  "commands": [
+    "./gradlew testDebugUnitTest",
+    "./gradlew lintDebug",
+    "./gradlew assembleRelease"
+  ],
+  "results": {
+    "testDebugUnitTest": "passed: 90 tests, 0 failures, 0 errors",
+    "lintDebug": "passed",
+    "assembleRelease": "passed"
+  },
+  "verified_contracts": [
+    "CreatorProfileStore automationEnabled defaults to false and persists both toggle values",
+    "AutomationProviderSelector eligible roster is exactly Gemini, ChatGPT, and Claude",
+    "Grok is excluded from normal and exclude-parameter selection paths"
+  ]
+}

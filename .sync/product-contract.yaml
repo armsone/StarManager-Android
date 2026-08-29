@@ -600,3 +600,81 @@ capabilities:
       - "com.armsone.starmanager.model.CreatorProfile"
     parity_row_ids:
       - "compact_generation_prompt_parity"
+
+  - id: "automation_studio"
+    purpose: "Opt-in ordinary automation that opens a photo picker on cold launch or on return after 15+ seconds, normalizes the ordered selection, hands it to a randomly chosen external AI provider (Gemini, ChatGPT, or Claude; Grok excluded), and presents a full-screen Automation Studio surface through processing, result, and failure states with an Instagram handoff. External image shares (ACTION_SEND/ACTION_SEND_MULTIPLE) and the launcher camera shortcut route into the same automation pipeline regardless of the opt-in setting."
+    source_refs:
+      - file: "StarManager/Features/Automation/AutomationStudio.swift"
+        description: "iPhone 2.5.0 Automation Studio opt-in flow, full-screen state machine, and provider selection"
+    entry_points:
+      - "MainActivity.onStart (cold launch / return after >=15s picker trigger, gated by CreatorProfileStore.automationEnabled)"
+      - "MainActivity.handleIncomingIntent (ACTION_SEND / ACTION_SEND_MULTIPLE and CAMERA_CAPTURE launcher shortcut, always active)"
+      - "ComposerScreen -> AutomationStudio full-screen dialog"
+      - "ProfileSettingsScreen '자동화' section toggle (testTag settings.automationEnabled)"
+    preconditions:
+      - "1 to 8 ordered image URIs available from picker or share intent"
+      - "CreatorProfileStore.automationEnabled == true for the ordinary (non-share, non-camera-shortcut) trigger path"
+    inputs:
+      - "Ordered list of 1-8 image byte arrays from photo picker or incoming share intent"
+      - "CreatorProfileStore.automationEnabled (Boolean, default false, persisted)"
+    normal_result: "Selected photos are normalized (EXIF-corrected, long edge <=2048px, JPEG <=2MB, quality stepped from .84 toward .50, further shrunk no lower than 640px, named aibi-%02d.jpg), sent in order to a randomly selected eligible provider through the existing hidden WebView automation pipeline, and the cleaned answer is shown full-screen with a 40x40 thumbnail strip, result card, and 'Instagram으로 보내기' handoff that copies the caption and shares the ordered media via FileProvider and ACTION_SEND/ACTION_SEND_MULTIPLE."
+    states:
+      IDLE: "No automation session active"
+      PROCESSING: "Preparing photos, connecting, and waiting for the provider answer (700ms poll cadence, 1.4s/3-tick stability, 119s timeout)"
+      RESULT: "Stable cleaned answer shown with thumbnail strip, result card, 'Instagram으로 보내기', '다시 만들기', and '취소'"
+      FAILURE: "Sanitized error shown with '다시 시도' (selects another eligible provider) and '닫기'"
+    algorithms_and_thresholds:
+      - "Eligible random providers: Gemini, ChatGPT, Claude only; Grok is excluded from AutomationProviderSelector.ELIGIBLE_PROVIDERS"
+      - "Cold launch or return to foreground after >=15s elapsed triggers the picker only when automationEnabled is true"
+      - "Disabling automationEnabled cancels an in-flight ordinary automation session; external share and camera shortcut sessions are unaffected"
+      - "Poll cadence 700ms; 1.4s (3-tick) stable-answer requirement; 119s generation timeout with exact copy '1분 59초 동안 답변이 없어서 중단했어요. 다시 시도해 주세요.'"
+      - "Image normalization: 1-8 images, EXIF-corrected/removed, long edge <=2048px, JPEG <=2,000,000 bytes, quality stepped from 84 down toward 50, further shrink no lower than 640px long edge"
+    data_contracts:
+      AutomationSessionState: "Idle, Processing(provider, stepTitle, stepSubtitle, elapsedSeconds, attachments, rawImages, requestId), Result(provider, generatedText, attachments, rawImages), Failure(lastProvider, errorMessage, attachments, rawImages)"
+      CreatorProfileStore.automationEnabled: "Boolean, default false, persisted under AUTOMATION_ENABLED_STORAGE_KEY"
+    producer_consumer_routes:
+      - "MainActivity onStart/onNewIntent -> ComposerViewModel.startOrdinaryPhotoAutomation / startPhotoAutomation -> AutomationSessionState"
+      - "ComposerScreen HiddenExternalAIWebView (driven by AutomationSessionState.Processing) -> ComposerViewModel.onAutomationStudioSubmitted/Success/Error"
+      - "AutomationStudio Result -> shareToInstagram -> FileProvider + ACTION_SEND/ACTION_SEND_MULTIPLE"
+    persistence_relaunch:
+      - "SharedPreferences (starmanager) persists automationEnabled across launches; automation session state itself is transient"
+    permissions_privacy_security:
+      - "Reuses existing FileProvider (com.armsone.starmanager.fileprovider) authority for Instagram handoff"
+      - "Original shared/picked media is only read and copied, never deleted"
+    background_lifecycle:
+      - "Automation timer job cancelled on resetComposer, cancelAutomationSession, or automation being disabled mid-session"
+    gestures_accessibility:
+      - "Full-screen Dialog with BackHandler mapped to cancel; testTags automation.cancel, automation.thumbnailStrip, automation.resultCard, automation.shareInstagram, automation.retryNew, automation.dismiss, automation.retry, automation.close"
+    supported_devices_layouts:
+      - "Full-screen phone/tablet dialog, max width 480-560dp content columns"
+    visual_reference:
+      - "Deterministic Compose/vector Interstellar-styled processing ring, result card, and Instagram gradient CTA; exact raster/photographic capture parity with iPhone not yet performed"
+    platform_adaptations:
+      ios:
+        status: "reference_verified"
+        description: "iPhone 2.5.0 Automation Studio opt-in flow, provider roster, and full-screen states"
+      android:
+        status: "implemented_source_only"
+        description: "Kotlin/Compose Automation Studio state machine, provider selector, MainActivity cold-launch/return/share/camera-shortcut wiring, and settings toggle implemented; Gradle unit tests, assembleDebug, and lintDebug were not executed in this session and remain pending, and no on-device or visual capture has been performed"
+    intentional_differences:
+      trigger_mechanism: "Android uses Activity onStart/onStop elapsed-realtime tracking for the 15s return threshold and ACTION_SEND/ACTION_SEND_MULTIPLE/App Shortcut intents instead of iOS scene-phase and share-extension equivalents"
+    implementations:
+      ios:
+        status: "reference_verified"
+        entry_file: "StarManager/Features/Automation/AutomationStudio.swift"
+        verification: "reference_verified"
+      android:
+        status: "needs_verification"
+        entry_file: "app/src/main/java/com/armsone/starmanager/ui/automation/AutomationStudio.kt"
+        verification: "Source reviewed and wired end-to-end (MainActivity, ComposerViewModel, ComposerScreen, ProfileSettingsScreen); focused JVM tests added (AutomationProviderSelectorTest, CreatorProfileStoreTest automationEnabled case) but not executed, and assembleDebug/lintDebug were not run in this session because no shell/build tool was available"
+    dependencies:
+      - "android.webkit.WebView"
+      - "androidx.core.content.FileProvider"
+      - "com.armsone.starmanager.ui.externalai.ExternalAIImageNormalizer"
+    parity_row_ids:
+      - "automation_studio_opt_in_default_off"
+      - "automation_studio_cold_launch_and_return_trigger"
+      - "automation_studio_external_share_and_camera_shortcut_always_active"
+      - "automation_studio_provider_roster_excludes_grok"
+      - "automation_studio_full_screen_states"
+      - "automation_studio_instagram_handoff"

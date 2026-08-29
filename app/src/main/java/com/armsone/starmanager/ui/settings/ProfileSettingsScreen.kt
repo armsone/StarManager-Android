@@ -19,11 +19,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.ArrowCircleDown
 import androidx.compose.material.icons.outlined.Diamond
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -75,6 +78,7 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
     val updateManager = remember(context) { DirectUpdateManager.get(context) }
     val appearance by store.appearance.collectAsStateWithLifecycle()
     val showsExternalAIBrowser by store.showsExternalAIBrowser.collectAsStateWithLifecycle()
+    val automationEnabled by store.automationEnabled.collectAsStateWithLifecycle()
 
     var activeLoginProvider by remember { mutableStateOf<DirectAIProvider?>(null) }
     var showsLogoutConfirmation by remember { mutableStateOf(false) }
@@ -115,7 +119,52 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                     .widthIn(max = 760.dp),
                 verticalArrangement = Arrangement.spacedBy(22.dp)
             ) {
-                // 1. 외부 로그인 관리
+                // 1. 자동화 설정
+                SettingsSection(
+                    header = "자동화",
+                    icon = Icons.Filled.AutoAwesome,
+                    footer = "끄면 앱을 열거나 15초 뒤 돌아와도 자동 미디어 선택이 시작되지 않아요. 다른 앱에서 직접 공유한 사진과 카메라 퀵 액션은 계속 사용할 수 있어요.",
+                    appearance = appearance,
+                    variant = IconWellVariant.ACCENT
+                ) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 10.dp)
+                            .semantics(mergeDescendants = true) {
+                                contentDescription = "켜면 앱을 열 때 미디어를 고른 뒤 무작위 AI로 보내는 자동화가 시작됩니다"
+                            },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "자동화 사용",
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = BrandTheme.labelPrimary(appearance)
+                            )
+                            Text(
+                                "켜면 앱을 열 때 미디어를 고른 뒤 무작위 AI로 보내는 자동화가 시작됩니다",
+                                fontSize = 12.sp,
+                                color = BrandTheme.labelSecondary(appearance)
+                            )
+                        }
+                        StarSwitch(
+                            checked = automationEnabled,
+                            appearance = appearance,
+                            onCheckedChange = { checked ->
+                                store.setAutomationEnabled(checked)
+                            },
+                            modifier = Modifier
+                                .testTag("settings.automationEnabled")
+                                .semantics {
+                                    contentDescription = "켜면 앱을 열 때 미디어를 고른 뒤 무작위 AI로 보내는 자동화가 시작됩니다"
+                                }
+                        )
+                    }
+                }
+
+                // 2. 외부 로그인 관리
                 SettingsSection(
                     header = "외부 로그인 관리",
                     icon = Icons.Filled.AccountCircle,
@@ -244,20 +293,30 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                     DirectUpdateSettings(updateManager)
                 }
 
-                // 3. 테마 관리 (BK / 클래식 외형 전환)
+                // 3. 테마 관리 (BK / 클래식 / 인터스텔라 외형 전환)
                 SettingsSection(
                     header = "테마 관리",
                     icon = Icons.Outlined.Diamond,
-                    footer = "클래식을 고르면 예전 모습으로 볼 수 있어요.",
+                    footer = "BK는 기본 모습, 클래식은 예전 모습, 인터스텔라는 은빛과 금빛이 도는 어두운 모습이에요.",
                     appearance = appearance,
                     variant = IconWellVariant.CARBON
                 ) {
                     StarSegmentedControl(
-                        options = listOf(AppAppearance.BK.title, AppAppearance.CLASSIC.title),
-                        selectedIndex = if (appearance == AppAppearance.BK) 0 else 1,
+                        options = listOf(AppAppearance.BK.title, AppAppearance.CLASSIC.title, AppAppearance.INTERSTELLAR.title),
+                        selectedIndex = when (appearance) {
+                            AppAppearance.BK -> 0
+                            AppAppearance.CLASSIC -> 1
+                            AppAppearance.INTERSTELLAR -> 2
+                        },
                         appearance = appearance,
                         onSelect = { index ->
-                            store.setAppearance(if (index == 0) AppAppearance.BK else AppAppearance.CLASSIC)
+                            store.setAppearance(
+                                when (index) {
+                                    0 -> AppAppearance.BK
+                                    1 -> AppAppearance.CLASSIC
+                                    else -> AppAppearance.INTERSTELLAR
+                                }
+                            )
                         },
                         modifier = Modifier
                             .padding(vertical = 6.dp)

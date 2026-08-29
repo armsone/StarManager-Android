@@ -42,14 +42,16 @@ class InMemoryKeyValueStore : KeyValueStore {
     override fun remove(key: String) { strings.remove(key); ints.remove(key) }
 }
 
-/** 앱 외형 테마: BK(기본)와 클래식 2가지 선택지 제공. */
+/** 앱 외형 테마: BK(기본), 클래식, 인터스텔라 3가지 선택지 제공. */
 enum class AppAppearance(val title: String) {
     BK("BK"),
-    CLASSIC("클래식");
+    CLASSIC("클래식"),
+    INTERSTELLAR("인터스텔라");
 
     companion object {
         fun fromString(value: String?): AppAppearance = when (value?.uppercase()) {
             "CLASSIC", "클래식" -> CLASSIC
+            "INTERSTELLAR", "인터스텔라" -> INTERSTELLAR
             else -> BK
         }
     }
@@ -70,6 +72,9 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
     private val _showsExternalAIBrowser: MutableStateFlow<Boolean>
     val showsExternalAIBrowser: StateFlow<Boolean> get() = _showsExternalAIBrowser.asStateFlow()
 
+    private val _automationEnabled: MutableStateFlow<Boolean>
+    val automationEnabled: StateFlow<Boolean> get() = _automationEnabled.asStateFlow()
+
     private val _profile: MutableStateFlow<CreatorProfile>
     val profile: StateFlow<CreatorProfile> get() = _profile.asStateFlow()
 
@@ -81,6 +86,9 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
         _appearance = MutableStateFlow(AppAppearance.fromString(storedAppearance))
         _showsExternalAIBrowser = MutableStateFlow(
             storage.getInt(SHOW_EXTERNAL_AI_BROWSER_STORAGE_KEY, 0) == 1
+        )
+        _automationEnabled = MutableStateFlow(
+            storage.getInt(AUTOMATION_ENABLED_STORAGE_KEY, 0) == 1
         )
         val storedPresets = storage.getString(PRESETS_STORAGE_KEY)?.let { json ->
             runCatching {
@@ -177,6 +185,11 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
     fun setShowsExternalAIBrowser(showsBrowser: Boolean) {
         _showsExternalAIBrowser.value = showsBrowser
         storage.putInt(SHOW_EXTERNAL_AI_BROWSER_STORAGE_KEY, if (showsBrowser) 1 else 0)
+    }
+
+    fun setAutomationEnabled(enabled: Boolean) {
+        _automationEnabled.value = enabled
+        storage.putInt(AUTOMATION_ENABLED_STORAGE_KEY, if (enabled) 1 else 0)
     }
 
     private fun save() {
@@ -293,6 +306,7 @@ class CreatorProfileStore(private val storage: KeyValueStore) {
         const val CURRENT_DEFAULT_STYLE_VERSION = 2
         const val APPEARANCE_STORAGE_KEY = "appAppearance"
         const val SHOW_EXTERNAL_AI_BROWSER_STORAGE_KEY = "showsExternalAIBrowser"
+        const val AUTOMATION_ENABLED_STORAGE_KEY = "automationEnabled"
 
         private const val LEGACY_ACCOUNT_TOPIC = "나의 일상과 경험"
         private const val LEGACY_AUDIENCE = "내 이야기에 공감하는 사람들"

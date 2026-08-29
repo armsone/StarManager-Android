@@ -58,11 +58,20 @@ fun StarSegmentedControl(
     appearance: AppAppearance = LocalAppAppearance.current
 ) {
     val isBk = appearance == AppAppearance.BK
+    val isInterstellar = appearance == AppAppearance.INTERSTELLAR
     val containerShape = RoundedCornerShape(9.dp)
     val segmentShape = RoundedCornerShape(7.dp)
 
-    val containerBackground = if (isBk) Color(0xFFE8EBF0) else Color(0x1F767680)
-    val containerBorder = if (isBk) BorderStroke(0.6.dp, BrandTheme.bkChromeHairline) else null
+    val containerBackground = when (appearance) {
+        AppAppearance.INTERSTELLAR -> Color(0xFF24262E)
+        AppAppearance.BK -> Color(0xFFE8EBF0)
+        AppAppearance.CLASSIC -> Color(0x1F767680)
+    }
+    val containerBorder = when (appearance) {
+        AppAppearance.INTERSTELLAR -> BorderStroke(0.8.dp, Color(0xFF3A3E4B))
+        AppAppearance.BK -> BorderStroke(0.6.dp, BrandTheme.bkChromeHairline)
+        AppAppearance.CLASSIC -> null
+    }
 
     val fontSize = when {
         options.size >= 5 -> 12.sp
@@ -81,10 +90,25 @@ fun StarSegmentedControl(
         options.forEachIndexed { index, option ->
             val selected = index == selectedIndex
             val segmentModifier = if (selected) {
-                Modifier
-                    .shadow(if (isBk) 2.dp else 2.dp, segmentShape)
-                    .background(Color.White, segmentShape)
-                    .then(if (isBk) Modifier.border(BorderStroke(0.5.dp, Color(0xFFD6DAE0)), segmentShape) else Modifier)
+                when (appearance) {
+                    AppAppearance.INTERSTELLAR -> {
+                        Modifier
+                            .shadow(2.dp, segmentShape)
+                            .background(Color(0xFF13151A), segmentShape)
+                            .border(BorderStroke(0.8.dp, BrandTheme.interstellarAccent.copy(alpha = 0.6f)), segmentShape)
+                    }
+                    AppAppearance.BK -> {
+                        Modifier
+                            .shadow(2.dp, segmentShape)
+                            .background(Color.White, segmentShape)
+                            .border(BorderStroke(0.5.dp, Color(0xFFD6DAE0)), segmentShape)
+                    }
+                    AppAppearance.CLASSIC -> {
+                        Modifier
+                            .shadow(2.dp, segmentShape)
+                            .background(Color.White, segmentShape)
+                    }
+                }
             } else Modifier
 
             Box(
@@ -107,9 +131,17 @@ fun StarSegmentedControl(
                     fontSize = fontSize,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (selected) {
-                        if (isBk) BrandTheme.bkLabelPrimary else BrandTheme.labelPrimary
+                        when (appearance) {
+                            AppAppearance.INTERSTELLAR -> BrandTheme.interstellarAccent
+                            AppAppearance.BK -> BrandTheme.bkLabelPrimary
+                            AppAppearance.CLASSIC -> BrandTheme.labelPrimary
+                        }
                     } else {
-                        if (isBk) BrandTheme.bkLabelSecondary else BrandTheme.labelSecondary
+                        when (appearance) {
+                            AppAppearance.INTERSTELLAR -> BrandTheme.interstellarLabelSecondary
+                            AppAppearance.BK -> BrandTheme.bkLabelSecondary
+                            AppAppearance.CLASSIC -> BrandTheme.labelSecondary
+                        }
                     },
                     textAlign = TextAlign.Center,
                     maxLines = 1,
@@ -225,11 +257,17 @@ fun StarSwitch(
     modifier: Modifier = Modifier,
     appearance: AppAppearance = LocalAppAppearance.current
 ) {
-    val isBk = appearance == AppAppearance.BK
     val trackColor = if (checked) {
-        BrandTheme.accent
+        when (appearance) {
+            AppAppearance.INTERSTELLAR -> BrandTheme.interstellarAccent
+            else -> BrandTheme.accent
+        }
     } else {
-        if (isBk) Color(0xFFD0D5DD) else Color(0x2E787880)
+        when (appearance) {
+            AppAppearance.INTERSTELLAR -> Color(0xFF2E313B)
+            AppAppearance.BK -> Color(0xFFD0D5DD)
+            AppAppearance.CLASSIC -> Color(0x2E787880)
+        }
     }
 
     Box(
@@ -244,24 +282,34 @@ fun StarSwitch(
             .padding(2.dp),
         contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart
     ) {
-        val thumbModifier = if (isBk) {
-            Modifier
-                .size(27.dp)
-                .shadow(2.dp, CircleShape)
-                .border(BorderStroke(0.6.dp, BrandTheme.bkChromeHairline), CircleShape)
-                .background(Color.White, CircleShape)
-        } else {
-            Modifier
-                .size(27.dp)
-                .shadow(2.dp, CircleShape)
-                .background(Color.White, CircleShape)
+        val thumbModifier = when (appearance) {
+            AppAppearance.INTERSTELLAR -> {
+                Modifier
+                    .size(27.dp)
+                    .shadow(2.dp, CircleShape)
+                    .border(BorderStroke(0.6.dp, BrandTheme.interstellarPlatinum), CircleShape)
+                    .background(Color.White, CircleShape)
+            }
+            AppAppearance.BK -> {
+                Modifier
+                    .size(27.dp)
+                    .shadow(2.dp, CircleShape)
+                    .border(BorderStroke(0.6.dp, BrandTheme.bkChromeHairline), CircleShape)
+                    .background(Color.White, CircleShape)
+            }
+            AppAppearance.CLASSIC -> {
+                Modifier
+                    .size(27.dp)
+                    .shadow(2.dp, CircleShape)
+                    .background(Color.White, CircleShape)
+            }
         }
         Box(thumbModifier)
     }
 }
 
 /**
- * GlossyPrimaryButton — 클래식의 원래 광택 차콜을 보존하고 BK는 더 짙은 카본으로 표현한다.
+ * GlossyPrimaryButton — 클래식의 원래 광택 차콜을 보존하고 BK는 더 짙은 카본, Interstellar는 흑요석/골드로 표현한다.
  * 화면당 하나의 강조 액션 규칙을 엄격하게 준수한다.
  */
 @Composable
@@ -273,34 +321,48 @@ fun GlossyPrimaryButton(
     appearance: AppAppearance = LocalAppAppearance.current,
     content: @Composable RowScope.() -> Unit
 ) {
-    val isBk = appearance == AppAppearance.BK
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.985f else 1f, label = "glossyPrimaryScale")
     val shape = RoundedCornerShape(16.dp)
 
-    val buttonModifier = if (isBk) {
-        val shadowAlpha = if (pressed) 0.18f else 0.34f
-        Modifier
-            .shadow(
-                elevation = if (pressed) 4.dp else 10.dp,
-                shape = shape,
-                ambientColor = BrandTheme.ink.copy(alpha = shadowAlpha),
-                spotColor = BrandTheme.ink.copy(alpha = shadowAlpha)
-            )
-            .background(BrandTheme.bkGlossyCarbon, shape)
-            .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.28f)), shape)
-    } else {
-        val shadowAlpha = if (pressed) 0.18f else 0.34f
-        Modifier
-            .shadow(
-                elevation = if (pressed) 4.dp else 10.dp,
-                shape = shape,
-                ambientColor = BrandTheme.ink.copy(alpha = shadowAlpha),
-                spotColor = BrandTheme.ink.copy(alpha = shadowAlpha)
-            )
-            .background(BrandTheme.glossyBlack, shape)
-            .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.24f)), shape)
+    val buttonModifier = when (appearance) {
+        AppAppearance.INTERSTELLAR -> {
+            val shadowAlpha = if (pressed) 0.25f else 0.45f
+            Modifier
+                .shadow(
+                    elevation = if (pressed) 4.dp else 10.dp,
+                    shape = shape,
+                    ambientColor = Color.Black.copy(alpha = shadowAlpha),
+                    spotColor = Color.Black.copy(alpha = shadowAlpha)
+                )
+                .background(BrandTheme.interstellarGlossy, shape)
+                .border(BorderStroke(0.8.dp, BrandTheme.interstellarAccent.copy(alpha = 0.5f)), shape)
+        }
+        AppAppearance.BK -> {
+            val shadowAlpha = if (pressed) 0.18f else 0.34f
+            Modifier
+                .shadow(
+                    elevation = if (pressed) 4.dp else 10.dp,
+                    shape = shape,
+                    ambientColor = BrandTheme.ink.copy(alpha = shadowAlpha),
+                    spotColor = BrandTheme.ink.copy(alpha = shadowAlpha)
+                )
+                .background(BrandTheme.bkGlossyCarbon, shape)
+                .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.28f)), shape)
+        }
+        AppAppearance.CLASSIC -> {
+            val shadowAlpha = if (pressed) 0.18f else 0.34f
+            Modifier
+                .shadow(
+                    elevation = if (pressed) 4.dp else 10.dp,
+                    shape = shape,
+                    ambientColor = BrandTheme.ink.copy(alpha = shadowAlpha),
+                    spotColor = BrandTheme.ink.copy(alpha = shadowAlpha)
+                )
+                .background(BrandTheme.glossyBlack, shape)
+                .border(BorderStroke(0.8.dp, Color.White.copy(alpha = 0.24f)), shape)
+        }
     }
 
     Row(

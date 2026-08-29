@@ -22,6 +22,8 @@ import com.armsone.starmanager.model.PostMood
 import com.armsone.starmanager.service.DeterministicCaptionGenerator
 import com.armsone.starmanager.service.DirectAIProvider
 import com.armsone.starmanager.service.ExternalPromptBuilder
+import com.armsone.starmanager.ui.automation.AutomationProviderSelector
+import com.armsone.starmanager.ui.automation.AutomationSessionState
 import com.armsone.starmanager.ui.externalai.ExternalAIAnswerCleaner
 import com.armsone.starmanager.ui.externalai.ExternalAIAttachment
 import com.armsone.starmanager.ui.externalai.ExternalAIAutomationPhase
@@ -76,10 +78,17 @@ class ComposerViewModel : ViewModel() {
 
     private val _state = MutableStateFlow(ComposerUiState())
     val state: StateFlow<ComposerUiState> = _state.asStateFlow()
+
+    private val _automationSessionState = MutableStateFlow<AutomationSessionState>(AutomationSessionState.Idle)
+    val automationSessionState: StateFlow<AutomationSessionState> = _automationSessionState.asStateFlow()
+
     private var generationJob: Job? = null
     private var timerJob: Job? = null
     private var mediaLoadJob: Job? = null
+    private var automationTimerJob: Job? = null
+    private var automationRequestIdCounter = 0
     private var resetVersion = 0
+    private var isOrdinaryAutomationSession = false
 
     private fun update(transform: (ComposerUiState) -> ComposerUiState) {
         _state.value = transform(_state.value)
@@ -103,7 +112,7 @@ class ComposerViewModel : ViewModel() {
         )
 
     fun hasContent(): Boolean = _state.value.run {
-        idea.isNotEmpty() || generatedPost != null || mediaItems.isNotEmpty() || captionCandidates.isNotEmpty() || pendingExternalProvider != null || isGenerating
+        idea.isNotEmpty() || generatedPost != null || mediaItems.isNotEmpty() || captionCandidates.isNotEmpty() || pendingExternalProvider != null || isGenerating || _automationSessionState.value !is AutomationSessionState.Idle
     }
 
     fun resetComposer() {
@@ -111,6 +120,9 @@ class ComposerViewModel : ViewModel() {
         generationJob?.cancel()
         timerJob?.cancel()
         mediaLoadJob?.cancel()
+        automationTimerJob?.cancel()
+        _automationSessionState.value = AutomationSessionState.Idle
+        isOrdinaryAutomationSession = false
         update { state ->
             state.copy(
                 idea = "",
@@ -139,6 +151,160 @@ class ComposerViewModel : ViewModel() {
                 automationRequestId = state.automationRequestId + 1
             )
         }
+    }
+
+    // MARK: - Automation Studio 세션 관리
+
+    /** 앱을 열거나 15초 뒤 돌아왔을 때 자동으로 시작되는 일반 자동화. 설정에서 끄면 즉시 취소된다. */
+    fun startOrdinaryPhotoAutomation(rawImages: List<ByteArray>) {
+        isOrdinaryAutomationSession = true
+        startPhotoAutomationInternal(rawImages, provider = null)
+    }
+
+    fun cancelOrdinaryAutomationIfActive() {
+        if (isOrdinaryAutomationSession && _automationSessionState.value !is AutomationSessionState.Idle) {
+            cancelAutomationSession()
+        }
+    }
+
+    /** 외부 공유 인텐트나 결과 화면의 재시도에서 호출된다. 최초 호출이면 일반 자동화 표시를 지운다. */
+    fun startPhotoAutomation(rawImages: List<ByteArray>, provider: DirectAIProvider? = null) {
+        if (provider == null) isOrdinaryAutomationSession = false
+        startPhotoAutomationInternal(rawImages, provider)
+    }
+
+    private fun startPhotoAutomationInternal(rawImages: List<ByteArray>, provider: DirectAIProvider?) {
+        if (rawImages.isEmpty()) return
+        val targetProvider = provider ?: AutomationProviderSelector.selectRandom()
+        val count = rawImages.size.coerceIn(1, 8)
+        val images = rawImages.take(count)
+        automationTimerJob?.cancel()
+        automationRequestIdCounter += 1
+        val reqId = automationRequestIdCounter
+
+        _automationSessionState.value = AutomationSessionState.Processing(
+            provider = targetProvider,
+            stepTitle = "사진을 준비하는 중…",
+            stepSubtitle = "선택한 사진 ${images.size}장을 전송용으로 줄이고 있어요",
+            elapsedSeconds = 0L,
+            attachments = emptyList(),
+            rawImages = images,
+            requestId = reqId
+        )
+
+        viewModelScope.launch {
+            try {
+                val attachments = withContext(Dispatchers.Default) {
+                    ExternalAIImageNormalizer.normalizeOrdered(images)
+                }
+                val current = _automationSessionState.value
+                if (current is AutomationSessionState.Processing && current.requestId == reqId) {
+                    _automationSessionState.value = current.copy(
+                        attachments = attachments,
+                        stepTitle = "${targetProvider.title}에 연결하는 중…",
+                        stepSubtitle = "사진 ${attachments.size}장과 입력창을 준비하고 있어요"
+                    )
+                }
+            } catch (_: CancellationException) {
+                return@launch
+            } catch (_: Exception) {
+                val current = _automationSessionState.value
+                if (current is AutomationSessionState.Processing && current.requestId == reqId) {
+                    _automationSessionState.value = AutomationSessionState.Failure(
+                        lastProvider = targetProvider,
+                        errorMessage = "선택한 사진을 전송용으로 준비하지 못했어요. 사진을 확인하고 다시 시도해 주세요.",
+                        attachments = emptyList(),
+                        rawImages = images
+                    )
+                }
+            }
+        }
+    }
+
+    fun onAutomationStudioSubmitted() {
+        val current = _automationSessionState.value
+        if (current !is AutomationSessionState.Processing) return
+        val reqId = current.requestId
+        val targetProvider = current.provider
+
+        _automationSessionState.value = current.copy(
+            stepTitle = "정보를 보냈어요",
+            stepSubtitle = ExternalAITimerFormatter.formatWaitingStatus(0L),
+            elapsedSeconds = 0L
+        )
+
+        automationTimerJob?.cancel()
+        automationTimerJob = viewModelScope.launch {
+            var elapsed = 0L
+            while (true) {
+                delay(1000L)
+                elapsed += 1L
+                val stateNow = _automationSessionState.value
+                if (stateNow !is AutomationSessionState.Processing || stateNow.requestId != reqId) {
+                    break
+                }
+                if (elapsed >= ExternalAITimerFormatter.GENERATION_TIMEOUT_SECONDS) {
+                    _automationSessionState.value = AutomationSessionState.Failure(
+                        lastProvider = targetProvider,
+                        errorMessage = "1분 59초 동안 답변이 없어서 중단했어요. 다시 시도해 주세요.",
+                        attachments = stateNow.attachments,
+                        rawImages = stateNow.rawImages
+                    )
+                    break
+                }
+                _automationSessionState.value = stateNow.copy(
+                    stepTitle = "답변을 기다리는 중",
+                    stepSubtitle = ExternalAITimerFormatter.formatWaitingStatus(elapsed),
+                    elapsedSeconds = elapsed
+                )
+            }
+        }
+    }
+
+    fun onAutomationStudioSuccess(answer: String, context: Context? = null) {
+        automationTimerJob?.cancel()
+        val current = _automationSessionState.value
+        if (current !is AutomationSessionState.Processing) return
+        val cleaned = ExternalAIAnswerCleaner.clean(answer, current.provider)
+        if (cleaned.isBlank()) {
+            _automationSessionState.value = AutomationSessionState.Failure(
+                lastProvider = current.provider,
+                errorMessage = "생성된 문구가 비어 있어요. 다시 시도해 주세요.",
+                attachments = current.attachments,
+                rawImages = current.rawImages
+            )
+            return
+        }
+        if (context != null) {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            clipboard?.setPrimaryClip(ClipData.newPlainText("StarManager", cleaned))
+        }
+        _automationSessionState.value = AutomationSessionState.Result(
+            provider = current.provider,
+            generatedText = cleaned,
+            attachments = current.attachments,
+            rawImages = current.rawImages
+        )
+    }
+
+    fun onAutomationStudioError(rawError: String?, provider: DirectAIProvider? = null) {
+        automationTimerJob?.cancel()
+        val current = _automationSessionState.value
+        if (current !is AutomationSessionState.Processing) return
+        val targetProvider = provider ?: current.provider
+        val sanitized = ExternalAIErrorSanitizer.sanitize(rawError, targetProvider)
+        _automationSessionState.value = AutomationSessionState.Failure(
+            lastProvider = targetProvider,
+            errorMessage = sanitized,
+            attachments = current.attachments,
+            rawImages = current.rawImages
+        )
+    }
+
+    fun cancelAutomationSession() {
+        automationTimerJob?.cancel()
+        _automationSessionState.value = AutomationSessionState.Idle
+        isOrdinaryAutomationSession = false
     }
 
     fun cancelGeneration() {

@@ -1,0 +1,24 @@
+{
+  "date": "2026-08-29",
+  "device": {
+    "adbSerial": "192.168.0.142:46327",
+    "model": "SM-F968N"
+  },
+  "candidate": {
+    "versionName": "2.5.1",
+    "versionCode": 346666,
+    "buildNumber": "202608291746"
+  },
+  "intent": "am start -W -a com.armsone.starmanager.action.CAMERA_CAPTURE -n com.armsone.starmanager/.MainActivity",
+  "launchState": "COLD",
+  "activity": "com.armsone.starmanager/.MainActivity",
+  "result": "passed",
+  "visibleSemantics": [
+    "취소",
+    "0/8",
+    "완료",
+    "카메라 전환",
+    "사진 촬영"
+  ],
+  "scope": "Direct camera intent verified. Launcher long-press and ACTION_SEND/ACTION_SEND_MULTIPLE fixtures remain open."
+}

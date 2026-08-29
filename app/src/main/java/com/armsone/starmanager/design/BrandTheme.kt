@@ -73,6 +73,35 @@ object BrandTheme {
     val bkLabelSecondary = Color(0xFF6B6E76)
     val bkDivider = Color(0x1F141518)
 
+    // Interstellar 특화 토큰 (Obsidian, Surface, Champagne Gold, Platinum)
+    val interstellarCanvas = Color(0xFF0D0E12)
+    val interstellarSurface = Color(0xFF1A1B20)
+    val interstellarSurfaceElevated = Color(0xFF24262E)
+    val interstellarAccent = Color(0xFFC7AD73) // Champagne Gold
+    val interstellarPlatinum = Color(0xFF8A909D)
+    val interstellarBorder = Color(0xFF2E313B)
+    val interstellarLabelPrimary = Color(0xFFF3F4F6)
+    val interstellarLabelSecondary = Color(0xFF9CA3AF)
+    val interstellarDivider = Color(0x2EFFFFFF)
+
+    val interstellarCardBorderGradient = Brush.linearGradient(
+        listOf(Color(0xFF3A3E4B), Color(0xFF252831), Color(0xFF3A3E4B))
+    )
+
+    val interstellarGlossy = Brush.verticalGradient(
+        0f to Color(0xFF252730),
+        0.48f to Color(0xFF181A21),
+        1f to Color(0xFF0E0F14)
+    )
+
+    val interstellarCanvasGradient = Brush.verticalGradient(
+        listOf(
+            Color(0xFF13151A),
+            Color(0xFF0D0E12),
+            Color(0xFF090A0D)
+        )
+    )
+
     val glossyBlack = Brush.verticalGradient(
         0f to Color(0.23f, 0.22f, 0.23f),
         0.48f to Color(0.09f, 0.08f, 0.085f),
@@ -110,64 +139,110 @@ object BrandTheme {
     )
 
     // 동적 테마 헬퍼
-    fun canvas(appearance: AppAppearance): Color =
-        if (appearance == AppAppearance.BK) bkCanvas else canvas
+    fun canvas(appearance: AppAppearance): Color = when (appearance) {
+        AppAppearance.INTERSTELLAR -> interstellarCanvas
+        AppAppearance.BK -> bkCanvas
+        AppAppearance.CLASSIC -> canvas
+    }
 
-    fun canvasBrush(appearance: AppAppearance): Brush =
-        if (appearance == AppAppearance.BK) bkCanvasGradient else canvasGradient
+    fun canvasBrush(appearance: AppAppearance): Brush = when (appearance) {
+        AppAppearance.INTERSTELLAR -> interstellarCanvasGradient
+        AppAppearance.BK -> bkCanvasGradient
+        AppAppearance.CLASSIC -> canvasGradient
+    }
 
-    fun surface(appearance: AppAppearance): Color =
-        if (appearance == AppAppearance.BK) bkEnamelWhite else surface
+    fun surface(appearance: AppAppearance): Color = when (appearance) {
+        AppAppearance.INTERSTELLAR -> interstellarSurface
+        AppAppearance.BK -> bkEnamelWhite
+        AppAppearance.CLASSIC -> surface
+    }
 
-    fun labelPrimary(appearance: AppAppearance): Color =
-        if (appearance == AppAppearance.BK) bkLabelPrimary else labelPrimary
+    fun labelPrimary(appearance: AppAppearance): Color = when (appearance) {
+        AppAppearance.INTERSTELLAR -> interstellarLabelPrimary
+        AppAppearance.BK -> bkLabelPrimary
+        AppAppearance.CLASSIC -> labelPrimary
+    }
 
-    fun labelSecondary(appearance: AppAppearance): Color =
-        if (appearance == AppAppearance.BK) bkLabelSecondary else labelSecondary
+    fun labelSecondary(appearance: AppAppearance): Color = when (appearance) {
+        AppAppearance.INTERSTELLAR -> interstellarLabelSecondary
+        AppAppearance.BK -> bkLabelSecondary
+        AppAppearance.CLASSIC -> labelSecondary
+    }
 
-    fun divider(appearance: AppAppearance): Color =
-        if (appearance == AppAppearance.BK) bkDivider else Color(0x293C3C43)
+    fun divider(appearance: AppAppearance): Color = when (appearance) {
+        AppAppearance.INTERSTELLAR -> interstellarDivider
+        AppAppearance.BK -> bkDivider
+        AppAppearance.CLASSIC -> Color(0x293C3C43)
+    }
 
-    fun settingsBackground(appearance: AppAppearance): Color =
-        if (appearance == AppAppearance.BK) bkCanvas else Color(0xFFF2F2F7)
+    fun settingsBackground(appearance: AppAppearance): Color = when (appearance) {
+        AppAppearance.INTERSTELLAR -> interstellarCanvas
+        AppAppearance.BK -> bkCanvas
+        AppAppearance.CLASSIC -> Color(0xFFF2F2F7)
+    }
 
-    fun settingsSectionBackground(appearance: AppAppearance): Color =
-        if (appearance == AppAppearance.BK) bkEnamelWhite else Color.White
+    fun settingsSectionBackground(appearance: AppAppearance): Color = when (appearance) {
+        AppAppearance.INTERSTELLAR -> interstellarSurface
+        AppAppearance.BK -> bkEnamelWhite
+        AppAppearance.CLASSIC -> Color.White
+    }
 }
 
 /** 카드 컨테이너 Modifier */
 fun Modifier.starCard(appearance: AppAppearance = AppAppearance.BK): Modifier {
-    return if (appearance == AppAppearance.BK) {
-        val shape = RoundedCornerShape(18.dp)
-        this
-            .shadow(6.dp, shape, ambientColor = Color(0x0A141518), spotColor = Color(0x12141518))
-            .background(BrandTheme.bkEnamelWhite, shape)
-            .border(BorderStroke(1.dp, BrandTheme.bkCardBorderGradient), shape)
-            .padding(18.dp)
-    } else {
-        val shape = RoundedCornerShape(20.dp)
-        this
-            .shadow(7.dp, shape, ambientColor = BrandTheme.ink.copy(alpha = 0.07f), spotColor = BrandTheme.ink.copy(alpha = 0.07f))
-            .background(BrandTheme.surface, shape)
-            .border(BorderStroke(1.dp, BrandTheme.cardBorderGradient), shape)
-            .padding(18.dp)
+    return when (appearance) {
+        AppAppearance.INTERSTELLAR -> {
+            val shape = RoundedCornerShape(18.dp)
+            this
+                .shadow(6.dp, shape, ambientColor = Color(0x20000000), spotColor = Color(0x35000000))
+                .background(BrandTheme.interstellarSurface, shape)
+                .border(BorderStroke(1.dp, BrandTheme.interstellarCardBorderGradient), shape)
+                .padding(18.dp)
+        }
+        AppAppearance.BK -> {
+            val shape = RoundedCornerShape(18.dp)
+            this
+                .shadow(6.dp, shape, ambientColor = Color(0x0A141518), spotColor = Color(0x12141518))
+                .background(BrandTheme.bkEnamelWhite, shape)
+                .border(BorderStroke(1.dp, BrandTheme.bkCardBorderGradient), shape)
+                .padding(18.dp)
+        }
+        AppAppearance.CLASSIC -> {
+            val shape = RoundedCornerShape(20.dp)
+            this
+                .shadow(7.dp, shape, ambientColor = BrandTheme.ink.copy(alpha = 0.07f), spotColor = BrandTheme.ink.copy(alpha = 0.07f))
+                .background(BrandTheme.surface, shape)
+                .border(BorderStroke(1.dp, BrandTheme.cardBorderGradient), shape)
+                .padding(18.dp)
+        }
     }
 }
 /** 취향/선호 설정 전용 옥스블러드 카드 Modifier */
 fun Modifier.oxbloodPreferenceCard(appearance: AppAppearance = AppAppearance.BK): Modifier {
-    return if (appearance == AppAppearance.BK) {
-        val shape = RoundedCornerShape(16.dp)
-        this
-            .shadow(3.dp, shape, ambientColor = Color(0x0A3E1219), spotColor = Color(0x103E1219))
-            .background(BrandTheme.bkOxbloodSurface, shape)
-            .border(BorderStroke(1.dp, BrandTheme.bkOxbloodBorder), shape)
-            .padding(16.dp)
-    } else {
-        val shape = RoundedCornerShape(14.dp)
-        this
-            .background(BrandTheme.surface, shape)
-            .border(BorderStroke(1.dp, BrandTheme.border), shape)
-            .padding(14.dp)
+    return when (appearance) {
+        AppAppearance.INTERSTELLAR -> {
+            val shape = RoundedCornerShape(16.dp)
+            this
+                .shadow(3.dp, shape, ambientColor = Color(0x18000000), spotColor = Color(0x28000000))
+                .background(BrandTheme.interstellarSurfaceElevated, shape)
+                .border(BorderStroke(1.dp, Color(0xFF333742)), shape)
+                .padding(16.dp)
+        }
+        AppAppearance.BK -> {
+            val shape = RoundedCornerShape(16.dp)
+            this
+                .shadow(3.dp, shape, ambientColor = Color(0x0A3E1219), spotColor = Color(0x103E1219))
+                .background(BrandTheme.bkOxbloodSurface, shape)
+                .border(BorderStroke(1.dp, BrandTheme.bkOxbloodBorder), shape)
+                .padding(16.dp)
+        }
+        AppAppearance.CLASSIC -> {
+            val shape = RoundedCornerShape(14.dp)
+            this
+                .background(BrandTheme.surface, shape)
+                .border(BorderStroke(1.dp, BrandTheme.border), shape)
+                .padding(14.dp)
+        }
     }
 }
 
@@ -193,60 +268,98 @@ fun IconWell(
     iconSize: Dp = 16.dp,
     tint: Color? = null
 ) {
-    val isBk = appearance == AppAppearance.BK
-    if (!isBk) {
-        // Classic: 기존 플레인 시스템 아이콘 표현 (웰 박스, 테두리, 그림자 없음)
-        val defaultTint = when (variant) {
-            IconWellVariant.OXBLOOD -> BrandTheme.warm
-            else -> BrandTheme.accent
+    when (appearance) {
+        AppAppearance.CLASSIC -> {
+            // Classic: 기존 플레인 시스템 아이콘 표현 (웰 박스, 테두리, 그림자 없음)
+            val defaultTint = when (variant) {
+                IconWellVariant.OXBLOOD -> BrandTheme.warm
+                else -> BrandTheme.accent
+            }
+            Box(
+                modifier = modifier.size(size),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = contentDescription,
+                    tint = tint ?: defaultTint,
+                    modifier = Modifier.size(iconSize)
+                )
+            }
         }
-        Box(
-            modifier = modifier.size(size),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                tint = tint ?: defaultTint,
-                modifier = Modifier.size(iconSize)
-            )
-        }
-    } else {
-        // BK Style: 정밀 카본/옥스블러드/에나멜 웰 및 헤어라인 크롬 테두리
-        val shape = RoundedCornerShape(8.dp)
-        val background = when (variant) {
-            IconWellVariant.CARBON -> BrandTheme.bkCarbonSurface
-            IconWellVariant.OXBLOOD -> BrandTheme.bkOxblood
-            IconWellVariant.ENAMEL -> BrandTheme.bkEnamelWhite
-            IconWellVariant.ACCENT -> BrandTheme.bkCarbonSurface
-        }
-        val defaultTint = when (variant) {
-            IconWellVariant.CARBON -> Color.White
-            IconWellVariant.OXBLOOD -> Color(0xFFF7ECEE)
-            IconWellVariant.ENAMEL -> BrandTheme.bkCarbonDark
-            IconWellVariant.ACCENT -> BrandTheme.accent
-        }
-        val borderStroke = when (variant) {
-            IconWellVariant.CARBON -> BorderStroke(0.7.dp, Color(0x33FFFFFF))
-            IconWellVariant.OXBLOOD -> BorderStroke(0.7.dp, Color(0x44FFFFFF))
-            IconWellVariant.ENAMEL -> BorderStroke(0.8.dp, BrandTheme.bkChromeHairline)
-            IconWellVariant.ACCENT -> BorderStroke(1.dp, BrandTheme.accent.copy(alpha = 0.6f))
-        }
+        AppAppearance.INTERSTELLAR -> {
+            // Interstellar: 흑요석 및 플래티넘/샴페인 골드 웰
+            val shape = RoundedCornerShape(8.dp)
+            val background = when (variant) {
+                IconWellVariant.CARBON -> BrandTheme.interstellarSurfaceElevated
+                IconWellVariant.OXBLOOD -> Color(0xFF281E24)
+                IconWellVariant.ENAMEL -> BrandTheme.interstellarSurface
+                IconWellVariant.ACCENT -> BrandTheme.interstellarSurfaceElevated
+            }
+            val defaultTint = when (variant) {
+                IconWellVariant.CARBON -> BrandTheme.interstellarPlatinum
+                IconWellVariant.OXBLOOD -> BrandTheme.interstellarAccent
+                IconWellVariant.ENAMEL -> BrandTheme.interstellarLabelPrimary
+                IconWellVariant.ACCENT -> BrandTheme.interstellarAccent
+            }
+            val borderStroke = when (variant) {
+                IconWellVariant.ACCENT -> BorderStroke(1.dp, BrandTheme.interstellarAccent.copy(alpha = 0.7f))
+                else -> BorderStroke(0.8.dp, BrandTheme.interstellarPlatinum.copy(alpha = 0.35f))
+            }
 
-        Box(
-            modifier = modifier
-                .size(size)
-                .shadow(2.dp, shape)
-                .background(background, shape)
-                .border(borderStroke, shape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                tint = tint ?: defaultTint,
-                modifier = Modifier.size(iconSize)
-            )
+            Box(
+                modifier = modifier
+                    .size(size)
+                    .shadow(2.dp, shape)
+                    .background(background, shape)
+                    .border(borderStroke, shape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = contentDescription,
+                    tint = tint ?: defaultTint,
+                    modifier = Modifier.size(iconSize)
+                )
+            }
+        }
+        AppAppearance.BK -> {
+            // BK Style: 정밀 카본/옥스블러드/에나멜 웰 및 헤어라인 크롬 테두리
+            val shape = RoundedCornerShape(8.dp)
+            val background = when (variant) {
+                IconWellVariant.CARBON -> BrandTheme.bkCarbonSurface
+                IconWellVariant.OXBLOOD -> BrandTheme.bkOxblood
+                IconWellVariant.ENAMEL -> BrandTheme.bkEnamelWhite
+                IconWellVariant.ACCENT -> BrandTheme.bkCarbonSurface
+            }
+            val defaultTint = when (variant) {
+                IconWellVariant.CARBON -> Color.White
+                IconWellVariant.OXBLOOD -> Color(0xFFF7ECEE)
+                IconWellVariant.ENAMEL -> BrandTheme.bkCarbonDark
+                IconWellVariant.ACCENT -> BrandTheme.accent
+            }
+            val borderStroke = when (variant) {
+                IconWellVariant.CARBON -> BorderStroke(0.7.dp, Color(0x33FFFFFF))
+                IconWellVariant.OXBLOOD -> BorderStroke(0.7.dp, Color(0x44FFFFFF))
+                IconWellVariant.ENAMEL -> BorderStroke(0.8.dp, BrandTheme.bkChromeHairline)
+                IconWellVariant.ACCENT -> BorderStroke(1.dp, BrandTheme.accent.copy(alpha = 0.6f))
+            }
+
+            Box(
+                modifier = modifier
+                    .size(size)
+                    .shadow(2.dp, shape)
+                    .background(background, shape)
+                    .border(borderStroke, shape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = contentDescription,
+                    tint = tint ?: defaultTint,
+                    modifier = Modifier.size(iconSize)
+                )
+            }
         }
     }
 }

@@ -67,6 +67,21 @@ class CreatorProfileStoreTest {
     }
 
     @Test
+    fun `자동화 사용은 기본으로 꺼져 있고 선택하면 영속화된다`() {
+        val storage = InMemoryKeyValueStore()
+        val store = CreatorProfileStore(storage)
+        assertFalse(store.automationEnabled.value)
+
+        store.setAutomationEnabled(true)
+        assertTrue(store.automationEnabled.value)
+        assertEquals(1, storage.getInt(CreatorProfileStore.AUTOMATION_ENABLED_STORAGE_KEY, 0))
+        assertTrue(CreatorProfileStore(storage).automationEnabled.value)
+
+        store.setAutomationEnabled(false)
+        assertFalse(CreatorProfileStore(storage).automationEnabled.value)
+    }
+
+    @Test
     fun `프로필 설정 변경 시 영속화되고 destination에 맞춰 글자 수가 자동 clamp된다`() {
         val storage = InMemoryKeyValueStore()
         val store = CreatorProfileStore(storage)

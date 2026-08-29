@@ -1,10 +1,19 @@
 package com.armsone.starmanager
 
 import android.content.ComponentName
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
+import androidx.core.content.IntentCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -58,7 +67,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.armsone.starmanager.design.BrandTheme
 import com.armsone.starmanager.design.LocalAppAppearance
 import com.armsone.starmanager.model.AppAppearance
@@ -70,6 +78,16 @@ import com.armsone.starmanager.ui.composer.ComposerViewModel
 import com.armsone.starmanager.ui.settings.ProfileSettingsScreen
 
 class MainActivity : ComponentActivity() {
+
+    private val composerViewModel: ComposerViewModel by viewModels()
+    private lateinit var profileStore: CreatorProfileStore
+
+    private val automationPickerTrigger = mutableIntStateOf(0)
+    private val cameraShortcutTrigger = mutableIntStateOf(0)
+
+    private var hasStartedBefore = false
+    private var lastStopElapsedRealtimeMs = 0L
+    private var incomingExplicitIntentHandled = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,38 +109,136 @@ class MainActivity : ComponentActivity() {
             storage.remove(CreatorProfileStore.DEFAULT_STYLE_VERSION_KEY)
             storage.remove(CreatorProfileStore.APPEARANCE_STORAGE_KEY)
             storage.remove(CreatorProfileStore.SHOW_EXTERNAL_AI_BROWSER_STORAGE_KEY)
+            storage.remove(CreatorProfileStore.AUTOMATION_ENABLED_STORAGE_KEY)
             storage.remove(ComposerViewModel.KEY_PASTE_GUIDANCE_SHOWN)
             FixtureHooks.resetStateRequested = false
         }
-        val profileStore = CreatorProfileStore(storage)
+        profileStore = CreatorProfileStore(storage)
+        composerViewModel.profileStore = profileStore
         DirectUpdateManager.get(applicationContext).start()
+
+        handleIncomingIntent(intent)
 
         setContent {
             val appearance by profileStore.appearance.collectAsStateWithLifecycle()
             LaunchedEffect(appearance) {
                 updateLauncherIcon(appearance)
             }
+            val automationTrigger by automationPickerTrigger
+            val cameraTrigger by cameraShortcutTrigger
             CompositionLocalProvider(LocalAppAppearance provides appearance) {
                 StarManagerTheme(appearance = appearance) {
-                    StarManagerApp(profileStore)
+                    StarManagerApp(
+                        profileStore = profileStore,
+                        composerViewModel = composerViewModel,
+                        automationPickerTrigger = automationTrigger,
+                        cameraShortcutTrigger = cameraTrigger
+                    )
                 }
             }
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingIntent(intent)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val now = SystemClock.elapsedRealtime()
+        val isColdStart = !hasStartedBefore
+        val returnedAfterThreshold = hasStartedBefore &&
+            (now - lastStopElapsedRealtimeMs) >= ORDINARY_AUTOMATION_RETURN_THRESHOLD_MS
+        hasStartedBefore = true
+        val explicitIntentHandled = incomingExplicitIntentHandled
+        incomingExplicitIntentHandled = false
+        if (
+            (isColdStart || returnedAfterThreshold) &&
+            !explicitIntentHandled &&
+            ::profileStore.isInitialized &&
+            profileStore.automationEnabled.value
+        ) {
+            automationPickerTrigger.value += 1
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        lastStopElapsedRealtimeMs = SystemClock.elapsedRealtime()
+    }
+
+    /** 외부 공유(SEND/SEND_MULTIPLE)와 카메라 런처 숏컷은 자동화 설정과 무관하게 항상 동작한다. */
+    private fun handleIncomingIntent(intent: Intent) {
+        when (intent.action) {
+            Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE -> {
+                incomingExplicitIntentHandled = true
+                handleShareIntent(intent)
+            }
+            ACTION_CAMERA_CAPTURE -> {
+                incomingExplicitIntentHandled = true
+                cameraShortcutTrigger.value += 1
+            }
+        }
+    }
+
+    private fun handleShareIntent(intent: Intent) {
+        val mimeType = intent.type
+        if (mimeType == null || !mimeType.startsWith("image/")) return
+        val uris: List<Uri> = when (intent.action) {
+            Intent.ACTION_SEND ->
+                IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+                    ?.let { listOf(it) }
+                    ?: emptyList()
+            Intent.ACTION_SEND_MULTIPLE ->
+                IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+                    ?: emptyList()
+            else -> emptyList()
+        }.take(8)
+        if (uris.isEmpty()) return
+
+        lifecycleScope.launch {
+            val images = withContext(Dispatchers.IO) {
+                uris.mapNotNull { uri ->
+                    runCatching {
+                        val type = contentResolver.getType(uri)
+                        if (type != null && !type.startsWith("image/")) return@runCatching null
+                        contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    }.getOrNull()
+                }
+            }
+            if (images.isNotEmpty()) {
+                composerViewModel.startPhotoAutomation(images)
+            }
+        }
+    }
+
+    companion object {
+        private const val ACTION_CAMERA_CAPTURE = "com.armsone.starmanager.action.CAMERA_CAPTURE"
+        private const val ORDINARY_AUTOMATION_RETURN_THRESHOLD_MS = 15_000L
+    }
+
     private fun updateLauncherIcon(appearance: AppAppearance) {
-        val selected = if (appearance == AppAppearance.CLASSIC) "ClassicIconAlias" else "BkIconAlias"
-        val other = if (appearance == AppAppearance.CLASSIC) "BkIconAlias" else "ClassicIconAlias"
+        val selected = when (appearance) {
+            AppAppearance.CLASSIC -> "ClassicIconAlias"
+            AppAppearance.INTERSTELLAR -> "InterstellarIconAlias"
+            AppAppearance.BK -> "BkIconAlias"
+        }
+        val allAliases = listOf("BkIconAlias", "ClassicIconAlias", "InterstellarIconAlias")
         packageManager.setComponentEnabledSetting(
             ComponentName(packageName, "$packageName.$selected"),
             PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
             PackageManager.DONT_KILL_APP
         )
-        packageManager.setComponentEnabledSetting(
-            ComponentName(packageName, "$packageName.$other"),
-            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-            PackageManager.DONT_KILL_APP
-        )
+        for (alias in allAliases) {
+            if (alias == selected) continue
+            packageManager.setComponentEnabledSetting(
+                ComponentName(packageName, "$packageName.$alias"),
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP
+            )
+        }
     }
 }
 
@@ -148,12 +264,15 @@ private enum class AppTab(val title: String) {
 }
 
 @Composable
-private fun StarManagerApp(profileStore: CreatorProfileStore) {
+private fun StarManagerApp(
+    profileStore: CreatorProfileStore,
+    composerViewModel: ComposerViewModel,
+    automationPickerTrigger: Int,
+    cameraShortcutTrigger: Int
+) {
     val appearance = LocalAppAppearance.current
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var showsResetConfirmation by rememberSaveable { mutableStateOf(false) }
-    val composerViewModel: ComposerViewModel = viewModel()
-    composerViewModel.profileStore = profileStore
 
     Column(
         Modifier
@@ -179,7 +298,11 @@ private fun StarManagerApp(profileStore: CreatorProfileStore) {
 
         Box(Modifier.weight(1f)) {
             when (AppTab.entries[selectedTab]) {
-                AppTab.COMPOSER -> ComposerScreen(composerViewModel)
+                AppTab.COMPOSER -> ComposerScreen(
+                    viewModel = composerViewModel,
+                    automationPickerTrigger = automationPickerTrigger,
+                    cameraShortcutTrigger = cameraShortcutTrigger
+                )
                 AppTab.SETTINGS -> ProfileSettingsScreen(profileStore)
             }
         }
@@ -262,10 +385,10 @@ private fun TopBar(
         }
 
         if (title == "스타메니저") {
-            val launcherIconRes = if (appearance == AppAppearance.CLASSIC) {
-                R.drawable.starmanager_app_icon_classic
-            } else {
-                R.drawable.starmanager_app_icon
+            val launcherIconRes = when (appearance) {
+                AppAppearance.CLASSIC -> R.drawable.starmanager_app_icon_classic
+                AppAppearance.INTERSTELLAR -> R.drawable.starmanager_app_icon_interstellar
+                AppAppearance.BK -> R.drawable.starmanager_app_icon
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
