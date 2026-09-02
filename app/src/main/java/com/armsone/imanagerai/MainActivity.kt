@@ -317,7 +317,7 @@ private fun IManagerAIApp(
     ) {
         // 인라인 네비게이션 타이틀 + 런처 아이콘
         TopBar(
-            title = if (selectedTab == 0) "iManagerAI" else "설정",
+            title = if (selectedTab == 0) "Stargram" else "설정",
             appearance = appearance,
             onCancel = if (selectedTab == 0) {
                 {
@@ -418,7 +418,7 @@ private fun TopBar(
             }
         }
 
-        if (title == "iManagerAI") {
+        if (title == "Stargram") {
             val launcherIconRes = when (appearance) {
                 AppAppearance.CLASSIC -> R.drawable.imanagerai_app_icon_classic
                 AppAppearance.INTERSTELLAR -> R.drawable.imanagerai_app_icon_interstellar
@@ -428,7 +428,7 @@ private fun TopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.semantics(mergeDescendants = true) {
-                    contentDescription = "iManagerAI"
+                    contentDescription = "Stargram"
                 }
             ) {
                 Image(

@@ -186,7 +186,7 @@ fun ProfileSettingsScreen(store: CreatorProfileStore) {
                 SettingsSection(
                     header = "외부 로그인 관리",
                     icon = Icons.Filled.AccountCircle,
-                    footer = "서비스 행을 누르면 공식 로그인 화면을 열 수 있어요. 모든 외부 AI 로그아웃은 이 앱의 Gemini, ChatGPT, Claude 웹 세션을 함께 지워요. iManagerAI는 비밀번호를 보거나 저장하지 않아요.",
+                    footer = "서비스 행을 누르면 공식 로그인 화면을 열 수 있어요. 모든 외부 AI 로그아웃은 이 앱의 Gemini, ChatGPT, Claude 웹 세션을 함께 지워요. Stargram는 비밀번호를 보거나 저장하지 않아요.",
                     appearance = appearance,
                     variant = IconWellVariant.CARBON
                 ) {

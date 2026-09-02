@@ -176,7 +176,7 @@ fun ExternalAISurface(
     fun copyPromptToClipboard() {
         if (prompt.isNotBlank()) {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-            clipboard?.setPrimaryClip(ClipData.newPlainText("iManagerAI Prompt", prompt))
+            clipboard?.setPrimaryClip(ClipData.newPlainText("Stargram Prompt", prompt))
         }
     }
 
@@ -186,7 +186,7 @@ fun ExternalAISurface(
         if (cleaned.isBlank()) return
         hasImportedAnswer = true
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        clipboard?.setPrimaryClip(ClipData.newPlainText("iManagerAI Result", cleaned))
+        clipboard?.setPrimaryClip(ClipData.newPlainText("Stargram Result", cleaned))
         onImport(cleaned)
         onClose()
     }

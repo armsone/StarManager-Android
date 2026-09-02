@@ -131,7 +131,7 @@ class DirectUpdateManager private constructor(private val context: Context) {
         if (_state.value.phase == UpdatePhase.DOWNLOADING) return
         if (automatic && !canAutoDownload()) return
         val request = DownloadManager.Request(Uri.parse(candidate.url))
-            .setTitle("iManagerAI ${candidate.version}")
+            .setTitle("Stargram ${candidate.version}")
             .setDescription("업데이트를 다운로드하는 중")
             .setMimeType(APK_MIME)
             .setAllowedOverMetered(!automatic)
@@ -229,7 +229,7 @@ class DirectUpdateManager private constructor(private val context: Context) {
                     requestMethod = "GET"
                     setRequestProperty("Accept", "application/vnd.github+json")
                     setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
-                    setRequestProperty("User-Agent", "iManagerAI-Android-updater")
+                    setRequestProperty("User-Agent", "Stargram-Android-updater")
                 }
                 val responseCode = connection.responseCode
                 if (responseCode == 404 && apiUrl != urls.last()) {
@@ -247,7 +247,7 @@ class DirectUpdateManager private constructor(private val context: Context) {
                         ?: error("릴리스 본문에 내부 코드가 없습니다")
                     if (internalCode <= BuildConfig.VERSION_CODE || compareVersions(version, BuildConfig.VERSION_NAME) <= 0) return null
                     val assets = json.getJSONArray("assets")
-                    val allowedNames = listOf("iManagerAI-Android-$version.apk", "iManager-Android-$version.apk", "StarManager-Android-$version.apk")
+                    val allowedNames = listOf("Stargram-Android-$version.apk", "iManagerAI-Android-$version.apk", "iManager-Android-$version.apk", "StarManager-Android-$version.apk")
                     for (index in 0 until assets.length()) {
                         val asset = assets.getJSONObject(index)
                         val name = asset.getString("name")
@@ -337,9 +337,9 @@ class DirectUpdateManager private constructor(private val context: Context) {
     private fun fail(message: String) { _state.value = _state.value.copy(phase = UpdatePhase.ERROR, message = message) }
 
     companion object {
-        private const val PRIMARY_REPO = "iManagerAI-Android"
+        private const val PRIMARY_REPO = "Stargram-Android"
         private const val FALLBACK_REPO = "iManager-Android"
-        private const val LEGACY_REPO = "StarManager-Android"
+        private const val LEGACY_REPO = "iManagerAI-Android"
         private const val API_URL = "https://api.github.com/repos/armsone/$PRIMARY_REPO/releases/latest"
         private const val FALLBACK_API_URL = "https://api.github.com/repos/armsone/$FALLBACK_REPO/releases/latest"
         private const val LEGACY_API_URL = "https://api.github.com/repos/armsone/$LEGACY_REPO/releases/latest"

@@ -277,7 +277,7 @@ class ComposerViewModel : ViewModel() {
         }
         if (context != null) {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-            clipboard?.setPrimaryClip(ClipData.newPlainText("iManagerAI", cleaned))
+            clipboard?.setPrimaryClip(ClipData.newPlainText("Stargram", cleaned))
         }
         _automationSessionState.value = AutomationSessionState.Result(
             provider = current.provider,
@@ -950,7 +950,7 @@ class ComposerViewModel : ViewModel() {
 
     private fun copyToClipboard(context: Context, text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        clipboard?.setPrimaryClip(ClipData.newPlainText("iManagerAI", text))
+        clipboard?.setPrimaryClip(ClipData.newPlainText("Stargram", text))
     }
 
     fun readClipboard(context: Context): String {

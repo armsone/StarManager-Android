@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "iManagerAI-Android"
+rootProject.name = "Stargram-Android"
 include(":app")

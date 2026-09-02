@@ -96,7 +96,7 @@ import java.util.Locale
 import java.util.UUID
 
 /**
- * iManagerAI 2.5.0 Automation Studio 전체 화면 서피스.
+ * Stargram 2.5.0 Automation Studio 전체 화면 서피스.
  * Deep space obsidian 배경, 회전하는 블랙홀/포털 링, 엔진 플레어 모션,
  * 40x40 썸네일 스트립, 빛나는 마크다운 결과 카드, 인스타그램 공유 CTA를 포함한다.
  */
@@ -212,7 +212,7 @@ private fun AutomationStudioTopBar(
                 modifier = Modifier.size(20.dp)
             )
             Text(
-                text = "iManagerAI 자동화",
+                text = "Stargram 자동화",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = BrandTheme.interstellarLabelPrimary,
@@ -793,7 +793,7 @@ private suspend fun shareToInstagram(
 ) {
     // 1. 문구 클립보드 복사
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-    clipboard?.setPrimaryClip(ClipData.newPlainText("iManagerAI", text))
+    clipboard?.setPrimaryClip(ClipData.newPlainText("Stargram", text))
 
     // 2. 미디어 파일 생성 및 FileProvider URI 준비
     val uris = withContext(Dispatchers.IO) {
